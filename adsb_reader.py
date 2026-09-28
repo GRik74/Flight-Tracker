@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from position import load_home_pos, distance_miles
+from position import load_home_pos
 from aircraft import Aircraft
 
 
