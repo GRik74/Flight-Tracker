@@ -1,6 +1,4 @@
-import position
-
-Knots_to_Mach = 0.00149984
+from position import distance_miles
 
 class Aircraft():
     def __init__(self, plane_data, home_lat, home_lon):
@@ -31,8 +29,11 @@ class Aircraft():
                 return True
             elif self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None:
                 return True
-            elif (isinstance(self.groundspeed, (int, float)) and (self.groundspeed < 200 and self.distance < 10)) or ((isinstance(self.groundspeed, (float)) and self.groundspeed * Knots_to_Mach) >= 0.9):
-                return True
+            elif isinstance(self.groundspeed, (int, float):
+                if self.groundspeed < 200 and self.distance < 8:
+                    return True
+                elif self.groundspeed > 600:
+                    return True
             
         return False
 
