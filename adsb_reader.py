@@ -31,6 +31,9 @@ def main():
 
     if len(interesting_planes) == 0:
         print("No interesting planes found.")
+        closest_plane = min(planes, key=lambda p: p.distance if isinstance(p.distance, (int, float)) else float('inf'))
+        print(f"Closest plane: {closest_plane.flight} | Distance: {closest_plane.distance} mi. | Altitude: {closest_plane.altitude} | Groundspeed: {closest_plane.groundspeed} kts")
+
     else:
         for plane in interesting_planes:
             print(
