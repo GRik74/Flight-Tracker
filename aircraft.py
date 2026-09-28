@@ -22,17 +22,24 @@ class Aircraft():
 
 
     def determine_interesting(self):
+        """
+            Run various methods related to position to get distance, closest approach, change in alt/speed, etc. to determine whether the plane is (or may become) interesting.
+                -For each plane, assign a value for each 'interesting' attribute (from 0.0 to 10.0) that will sum to determine whether the plane is interesting, remains interesting, goes into watchlist, or isn't interesting at all
+                -Planes with closest approach > 15 miles or (alt > 25000 and closest approach > 5 miles) are assigned 0.0 regardless of any other attributes
+        """
+        
+        
         if self.distance != "unknown":
             if self.distance <= 5:
                 return True
-            elif self.distance <= 15 and isinstance(self.altitude, (int, float)) and self.altitude < 15000:
+            elif self.distance <= 15 and isinstance(self.altitude, (int, float)) and self.altitude < 15000:# and is_closing
                 return True
             elif self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None:
                 return True
             elif isinstance(self.groundspeed, (int, float):
-                if self.groundspeed < 200 and self.distance < 8:
+                if self.groundspeed < 200 and self.distance < 8:# and is_closing
                     return True
-                elif self.groundspeed > 600:
+                elif self.groundspeed > 600:# and is_closing
                     return True
             
         return False
