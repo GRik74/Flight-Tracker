@@ -1,7 +1,6 @@
 from pathlib import Path
 from math import radians, sin, cos, sqrt, atan2
 
-
 LOCATION_FILE = Path("location.txt")
 
 def load_home_pos():
@@ -26,6 +25,3 @@ def distance_miles(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
     return round(earth_radius_miles * c, 1)
-
-
-home_lat, home_lon = load_home_pos()

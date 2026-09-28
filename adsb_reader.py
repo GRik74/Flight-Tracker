@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from position import *
+from position import load_home_pos, distance_miles
 from aircraft import Aircraft
 
 
@@ -27,8 +27,7 @@ def main():
     for plane in aircraft:
         this_plane = Aircraft(plane, home_lat, home_lon)
         planes.append(this_plane)
-        if this_plane.distance != "unknown" and (this_plane.distance <= 5 or (this_plane.distance <= 15 and this_plane.altitude < 15000)):
-            interesting_planes.append(this_plane)
+        if this_plane.is_interesting: interesting_planes.append(this_plane)
 
     if len(interesting_planes) == 0:
         print("No interesting planes found.")

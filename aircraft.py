@@ -15,3 +15,9 @@ class Aircraft():
         else:
             self.distance = "unknown"
 
+        self.is_interesting = False
+        if self.distance != "unknown":
+            if self.distance <= 5:
+                self.is_interesting = True
+            elif self.distance <= 15 and isinstance(self.altitude, (int, float)) and self.altitude < 15000:
+                self.is_interesting = True
