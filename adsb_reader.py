@@ -18,8 +18,9 @@ def main():
     aircraft = load_aircraft()
     planes = []
     interesting_planes = []
+    watchlist = []
 
-    print(f"Aircraft currently tracked: {len(aircraft)}")
+    print(f"Aircraft heard: {len(aircraft)}")
 
 
 
@@ -28,6 +29,7 @@ def main():
         if isinstance(this_plane.distance, (int, float)): planes.append(this_plane)
         if this_plane.is_interesting: interesting_planes.append(this_plane)
 
+    print(f"Aircraft with known positions: {len(planes)}")
     if len(interesting_planes) == 0:
         if planes:
             print("No interesting planes found... Finding the closest plane instead...\n")
