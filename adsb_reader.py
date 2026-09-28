@@ -20,27 +20,26 @@ def main():
     interesting_planes = []
 
     print(f"Aircraft currently tracked: {len(aircraft)}")
-    print()
 
-    
+
 
     for plane in aircraft:
         this_plane = Aircraft(plane, home_lat, home_lon)
-        planes.append(this_plane)
+        if isinstance(this_plane.distance, (int, float)): planes.append(this_plane)
         if this_plane.is_interesting: interesting_planes.append(this_plane)
 
     if len(interesting_planes) == 0:
-        print("No interesting planes found.")
-        closest_plane = min(planes, key=lambda p: p.distance if isinstance(p.distance, (int, float)) else float('inf'))
-        print(f"Closest plane: {closest_plane.flight} | Distance: {closest_plane.distance} mi. | Altitude: {closest_plane.altitude} | Groundspeed: {closest_plane.groundspeed} kts")
-
+        if planes:
+            print("No interesting planes found... Finding the closest plane instead...\n")
+            closest_plane = min(planes, key=lambda plane: plane.distance if isinstance(plane.distance, (int, float)) else float('inf'))
+            print(f"Closest plane: {closest_plane.flight} | Distance: {closest_plane.distance} mi. | Altitude: {closest_plane.altitude} | Groundspeed: {closest_plane.groundspeed} kts")
+        else:
+            print("No planes with valid distance information found.")
     else:
+        print(f"Found {len(interesting_planes)} interesting planes:\n")
         for plane in interesting_planes:
             print(
-                f"{plane.flight:10}  "
-                f"ICAO: {plane.hex_code:6}  "
-                f"Alt: {str(plane.altitude):>7}  "
-                f"GS: {str(plane.groundspeed):>8} kts  "
+                f"{plane.flight:10} | ICAO: {plane.hex_code:6} | Alt: {str(plane.altitude):>7} | GS: {str(plane.groundspeed):>8} kts | "
                 f"Dist (mi.): {str(plane.distance):>8}"
             )
 
