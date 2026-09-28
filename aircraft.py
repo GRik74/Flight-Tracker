@@ -31,7 +31,7 @@ class Aircraft():
                 return True
             elif self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None:
                 return True
-            elif isinstance(self.groundspeed, (int, float)) and (self.groundspeed < 200 and self.distance < 10) or (isinstance(self.groundspeed, (float)) and self.groundspeed * Knots_to_Mach) >= 0.9:
+            elif (isinstance(self.groundspeed, (int, float)) and (self.groundspeed < 200 and self.distance < 10)) or ((isinstance(self.groundspeed, (float)) and self.groundspeed * Knots_to_Mach) >= 0.9):
                 return True
             
         return False
