@@ -39,7 +39,7 @@ class Aircraft():
         self.is_interesting = self.determine_interesting() # self.determine_interesting(persistent=False)
 
 
-    # def update_attrributes(self, home_lat, home_lon):
+    # def update_attributes(self, home_lat, home_lon):
         
 
 
@@ -70,7 +70,7 @@ class Aircraft():
 
         # Positional factors - where it is
         dist_factor = max((20.0 - self.distance), 0.0) * 0.5 if self.distance_available else 0.0
-        alt_factor = max((25000 - self.altitude)/2000), 0.0) * 0.2 if self.altitude_available else 0.0
+        alt_factor = max((25000 - self.altitude)/2000, 0.0) * 0.2 if self.altitude_available else 0.0
         aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
         
         pos_factors = (dist_factor + alt_factor + aob_factor) * 0.8
