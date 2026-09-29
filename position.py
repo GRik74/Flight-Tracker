@@ -1,9 +1,13 @@
 from pathlib import Path
-from math import radians, sin, cos, sqrt, atan2
+from math import radians, sin, cos, sqrt, atan2, degrees
 
 LOCATION_FILE = Path("location.txt")
 
 def load_home_pos():
+    """
+    Load the home position (latitude and longitude) from the location.txt file.
+    Returns: A tuple containing the latitude and longitude as floats.
+    """
     text = LOCATION_FILE.read_text(encoding="utf-8").strip()
     lat_text, lon_text = text.split(",")
 
@@ -11,6 +15,12 @@ def load_home_pos():
 
 
 def distance_miles(lat1, lon1, lat2, lon2):
+    """
+    Calculate the distance between point A and point B using the Haversine formula.
+    Returns the distance in miles.
+    """
+
+
     earth_radius_miles = 3958.8
 
     lat1 = radians(lat1)
@@ -25,3 +35,24 @@ def distance_miles(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
     return round(earth_radius_miles * c, 1)
+
+def get_bearing(lat1, lon1, lat2, lon2):
+    """
+    Calculate the bearing from point A (lat1, lon1) to point B (lat2, lon2).
+    Returns the bearing in degrees (0-360).
+    """
+    lat1 = radians(lat1)
+    lon1 = radians(lon1)
+    lat2 = radians(lat2)
+    lon2 = radians(lon2)
+
+    dlon = lon2 - lon1
+
+    x = sin(dlon) * cos(lat2)
+    y = cos(lat1) * sin(lat2) - (sin(lat1) * cos(lat2) * cos(dlon))
+
+    initial_bearing = atan2(x, y)
+    initial_bearing_degrees = degrees(initial_bearing)
+    compass_bearing = (initial_bearing_degrees + 360) % 360
+
+    return round(compass_bearing, 1)

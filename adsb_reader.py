@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from position import load_home_pos
 from aircraft import Aircraft
+# from math import round
 
 
 AIRCRAFT_FILE = Path("/run/dump1090-fa/aircraft.json")
@@ -12,6 +13,13 @@ def load_aircraft():
         data = json.load(file)
 
         return data.get("aircraft", [])
+
+
+def show_planes(planes):
+    for plane in planes:
+        print(
+            f"{plane.flight:10} | Dist.: {str(round(plane.distance, 1)):>6} | Bearing: {str(int(round(plane.bearing_to_plane, 0))):>4} | Heading: {str(int(round(plane.heading, 0))):>4} | Alt: {str(round(plane.altitude, 1)):>7} | GS: {str(int(round(plane.groundspeed, 0))):>5} kts"
+        )
 
 
 def main():
@@ -34,16 +42,12 @@ def main():
         if planes:
             print("No interesting planes found... Finding the closest plane instead...\n")
             closest_plane = min(planes, key=lambda plane: plane.distance if isinstance(plane.distance, (int, float)) else float('inf'))
-            print(f"Closest plane: {closest_plane.flight} | Distance: {closest_plane.distance} mi. | Altitude: {closest_plane.altitude} | Groundspeed: {closest_plane.groundspeed} kts")
+            show_planes([closest_plane])
         else:
             print("No planes with valid distance information found.")
     else:
         print(f"Found {len(interesting_planes)} interesting planes:\n")
-        for plane in interesting_planes:
-            print(
-                f"{plane.flight:10} | ICAO: {plane.hex_code:6} | Alt: {str(plane.altitude):>7} | GS: {str(plane.groundspeed):>8} kts | "
-                f"Dist (mi.): {str(plane.distance):>8}"
-            )
+        show_planes(interesting_planes)
 
 
 
