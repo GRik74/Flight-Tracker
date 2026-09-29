@@ -7,18 +7,19 @@ class Aircraft():
         self.flight = self.plane.get("flight", "").strip() or "unknown"
         self.altitude = self.plane.get("alt_baro", "unknown")
         self.groundspeed = self.plane.get("gs", "unknown")
-        self.heading = self.plane.get("track", "unknown")
+        self.track = self.plane.get("track", "unknown")
 
         self.lat = self.plane.get("lat", "unknown")
         self.lon = self.plane.get("lon", "unknown")
 
-        self.distance = 0.0
-        self.bearing_to_plane = 0.0
-        self.recip_bearing = 0.0
-        self.angle_on_bow = 0.0
+        self.distance = None
+        self.bearing_to_plane = None
+        self.recip_bearing = None
+        self.angle_on_bow = None
+        self.relative_bearing = None
 
         self.distance_available = True if self.lat != "unknown" and self.lon != "unknown" else False
-        self.relational_info_available = True if self.distance_available and isinstance(self.heading, (int, float)) else False
+        self.relational_info_available = True if self.distance_available and isinstance(self.track, (int, float)) else False
 
         if self.distance_available:
             self.get_relational_info(home_lat, home_lon)
@@ -29,13 +30,13 @@ class Aircraft():
             # self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
             # self.recip_bearing = self.bearing_to_plane - 180 if self.bearing_to_plane > 180 else self.bearing_to_plane + 180
 
-            # if self.heading != "unknown":
+            # if self.track != "unknown":
             #     self.relational_info_available = True
             # else:
             #     self.relational_info_available = False
 
 
-            # self.angle_on_bow = self.heading - self.recip_bearing
+            # self.angle_on_bow = self.track - self.recip_bearing
             # if self.angle_on_bow < 0:
             #     self.angle_on_bow += 360
 
@@ -86,12 +87,11 @@ class Aircraft():
         """Sets relational information about the plane (distance, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
         self.distance = distance_miles(home_lat, home_lon, self.lat, self.lon)
         self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
-        self.recip_bearing = self.bearing_to_plane - 180 if self.bearing_to_plane > 180 else self.bearing_to_plane + 180
+        self.recip_bearing = (self.bearing_to_plane + 180) % 360
 
         if self.relational_info_available:
-            self.angle_on_bow = self.heading - self.recip_bearing
-            if self.angle_on_bow < 0:
-                self.angle_on_bow += 360
+            self.relative_bearing = (self.recip_bearing - self.track) % 360
+            self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
 
     # def get_rate_of_close(self):
 

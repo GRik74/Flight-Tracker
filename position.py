@@ -34,7 +34,7 @@ def distance_miles(lat1, lon1, lat2, lon2):
     a = (sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2)
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
-    return round(earth_radius_miles * c, 1)
+    return earth_radius_miles * c
 
 def get_bearing(lat1, lon1, lat2, lon2):
     """
@@ -55,4 +55,4 @@ def get_bearing(lat1, lon1, lat2, lon2):
     initial_bearing_degrees = degrees(initial_bearing)
     compass_bearing = (initial_bearing_degrees + 360) % 360
 
-    return round(compass_bearing, 1)
+    return compass_bearing
