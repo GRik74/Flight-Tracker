@@ -1,13 +1,16 @@
 from position import distance_miles, get_bearing
+from enum import Enum
 
 class Aircraft():
     def __init__(self, plane_data, home_lat, home_lon):
+        self.Interesting = Interestingness.NOT_INTERESTING
         self.plane = plane_data
         self.hex_code = self.plane.get("hex", "unknown")
         self.flight = self.plane.get("flight", "").strip() or "unknown"
         self.altitude = self.plane.get("alt_baro", "unknown")
         self.groundspeed = self.plane.get("gs", "unknown")
         self.track = self.plane.get("track", "unknown")
+        self.emergency = self.plane.get("emergency", "unknown")
 
         self.lat = self.plane.get("lat", "unknown")
         self.lon = self.plane.get("lon", "unknown")
@@ -17,34 +20,18 @@ class Aircraft():
         self.recip_bearing = None
         self.angle_on_bow = None
         self.relative_bearing = None
+        self.is_closing = False
+        self.closest_point_of_approach = {'distance': None, 'time': None, 'bearing': None}
 
+        self.altitude_available = True if isinstance(self.altitude, (int, float)) else False
+        self.groundspeed_available = True if isinstance(self.groundspeed, (int, float)) else False
         self.distance_available = True if self.lat != "unknown" and self.lon != "unknown" else False
         self.relational_info_available = True if self.distance_available and isinstance(self.track, (int, float)) else False
 
         if self.distance_available:
             self.get_relational_info(home_lat, home_lon)
 
-        # if self.lat != "unknown" and self.lon != "unknown":
-        #     self.distance_available = True
-            # self.distance = distance_miles(home_lat, home_lon, self.lat, self.lon)
-            # self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
-            # self.recip_bearing = self.bearing_to_plane - 180 if self.bearing_to_plane > 180 else self.bearing_to_plane + 180
-
-            # if self.track != "unknown":
-            #     self.relational_info_available = True
-            # else:
-            #     self.relational_info_available = False
-
-
-            # self.angle_on_bow = self.track - self.recip_bearing
-            # if self.angle_on_bow < 0:
-            #     self.angle_on_bow += 360
-
-        # else:
-        #     self.distance_available = False
-        #     self.relational_info_available = False
-
-        self.emergency = self.plane.get("emergency", "unknown")
+       
 
         self.is_interesting = self.determine_interesting()
 
@@ -65,7 +52,28 @@ class Aircraft():
                     -Latch interesting-ness state once threshold for 'interesting' passed, don't reset/downgrade state until interesting-ness score falls below some threshold to avoid repeated state flip-flops
         """
         
-        
+
+        ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be ignored
+        if not self.distance_available or not self.altitude_available or not self.groundspeed_available:
+            self.interesting = Interestingness.IGNORE
+            return False
+
+        ##### Algorithm - Not fully implemented yet, only sets Interestingness enum value #####
+
+        # Positional factors - where it is
+        dist_factor = min((20.0 - self.distance)/2, 0.0) * 0.4 if self.distance_available else 0.0
+        alt_factor = min((25 - self.altitude/10000)/2.5, 0.0) * 0.2 if self.altitude_available else 0.0
+        aob_factor = ((90 - self.angle_on_bow)/9) * 0.2 if self.relational_info_available else 0.0
+        pos_factors = (dist_factor + alt_factor + aob_factor) * 0.6
+
+        # Behavioral factors - what it's doing
+        speed_factor = min((600 - self.groundspeed)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0
+
+        # Bonuses and special cases - things that make it more interesting than it would otherwise be
+        emergency_bonus = 2.0 if self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None else 0.0
+        closing_bonus = max(90 / self.angle_on_bow, 5) if self.is_closing else 0.0 # Possibly redundant due to aob_factor?
+
+        # Neanderthal decision tree for determining interesting-ness of a plane based on distance, altitude, emergency status, and groundspeed. Will be replaced with more sophisticated algorithm in future.
         if self.distance_available:
             if self.distance <= 5:
                 return True
@@ -92,17 +100,37 @@ class Aircraft():
         if self.relational_info_available:
             self.relative_bearing = (self.recip_bearing - self.track) % 360
             self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
-
-    # def get_rate_of_close(self):
+            if self.angle_on_bow < 90:
+                self.is_closing = True
+                # self.closest_point_of_approach = self.closest_point_of_approach(home_lat, home_lon)
 
 
     # def get_rate_of_climb(self):
+        # Use combo of ADS-B vertical rate output and recent altitude history to determine whether plane is climbing, descending, or level and at what rate (ft/min)
 
-
-    # def get_eta_nearest_point(self):
+    # def closest_point_of_approach(self, targ_lat, targ_lon):
+        # Find closest point of approach; Return distance, time to CPA, and bearing of of CPA
 
 
     # def potentially_interesting(self):
 
 
+    # def flight_path_analysis(self):
+        # Only run if distance_available and relational_info_available are True and plane is 'interesting'
+        # Check plane's track, altitude, ground speed, coordinates, and recent history of those values to determine if it might be taking off or landing (very low alt but ascending + low speed but increasing, or descending from cruising alt + slowing down)
+        # If flight number available, check if coordinates + track + altitude correlate with origin/destination locations
+        # Check plane's coordinates and track to determine whether it might be heading toward preset locations (August, Charlotte, Atlanta, CAE, etc.)
+        
+
+
+    # def decode_flight_number(self):
+        # Check flight number to determine whether it is a commercial flight or not (if it is, check flight number against known flights to determine origin/destination)
+
+
+class Interestingness(Enum):
+    IGNORE = -1
+    NOT_INTERESTING = 0
+    WATCHLIST = 1
+    INTERESTING = 2
+    VERY_INTERESTING = 3
 

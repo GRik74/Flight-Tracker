@@ -20,7 +20,8 @@ def show_planes(planes):
         plane_info = f"{plane.flight:10}"
         if plane.distance_available: plane_info += f" | Dist.: {str(round(plane.distance, 1)):>6} | Bearing: {str(int(round(plane.bearing_to_plane, 0))):>4}"
         if plane.relational_info_available: plane_info += f" | Track: {str(int(round(plane.track, 0))):>4}"
-        plane_info += f" | Alt: {str(round(plane.altitude, 1)):>7} | GS: {str(int(round(plane.groundspeed, 0))):>8} kts"
+        plane_info += f" | Alt: {str(round(plane.altitude, 1)):>7} ft" if plane.altitude_available else f" | Alt: {'unknown':>7} ft"
+        plane_info += f" | GS: {str(int(round(plane.groundspeed, 0))):>8} kts" if plane.groundspeed_available else f" | GS: {'unknown':>8} kts"
 
         print(plane_info)
 
