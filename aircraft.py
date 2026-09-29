@@ -34,15 +34,16 @@ class Aircraft():
             self.get_relational_info(home_lat, home_lon)
 
        
-
-        self.is_interesting = self.determine_interesting()
+        self.LATCHED_NOT_INTERESTING = False
+        self.LATCHED_INTERESTING = False
+        self.is_interesting = self.determine_interesting() # self.determine_interesting(persistent=False)
 
 
     # def update_attrributes(self, home_lat, home_lon):
         
 
 
-    def determine_interesting(self):
+    def determine_interesting(self, persistent=True):
         """
             Current Function: Determines whether a plane is interesting based on decision tree.
             
@@ -58,6 +59,7 @@ class Aircraft():
                     -Latch interesting-ness state once threshold for 'interesting' passed, don't reset/downgrade state until interesting-ness score falls below some threshold to avoid repeated state flip-flops
         """
         
+        if self.interesting == Interesting.IGNORE: return False
 
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be ignored
         if not self.distance_available or not self.altitude_available or not self.groundspeed_available:
@@ -67,17 +69,17 @@ class Aircraft():
         ##### Algorithm - Not fully implemented yet, only sets Interesting enum value #####
 
         # Positional factors - where it is
-        dist_factor = max((20.0 - self.distance)/2, 0.0) * 0.5 if self.distance_available else 0.0
-        alt_factor = max((25 - self.altitude/10000)/2.5, 0.0) * 0.2 if self.altitude_available else 0.0
-        aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
+        dist_factor = max((20.0 - self.distance), 0.0) * 0.5 if self.distance_available else 0.0
+        alt_factor = max((25 - self.altitude/10000), 0.0) * 0.1 if self.altitude_available else 0.0
+        aob_factor = ((90 - self.angle_on_bow)/9) * 0.2 if self.relational_info_available else 0.0
         
-        pos_factors = (dist_factor + alt_factor + aob_factor) * 0.6
+        pos_factors = (dist_factor + alt_factor + aob_factor) * 0.8
 
 
         # Behavioral factors - what it's doing
         speed_factor = min((600 - self.groundspeed)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0
         
-        behavioral_factors = (speed_factor) * 0.
+        behavioral_factors = (speed_factor) * 0.2
 
 
         # Bonuses and special cases - things that make it more interesting than it would otherwise be
@@ -87,11 +89,44 @@ class Aircraft():
         
         
         # Multipliers - things that have a non-linear effect on how interesting the plane might be
-        very_low_alt_mult = (5000 - self.altitude)/1000 if self.altitude < 5000 else 0.0
+        very_low_alt_mult = (5000 - self.altitude) * 0.00002 if self.altitude < 5000 else 0.0
         
         
         # State Assignment
         base_score = (pos_factors + behavioral_factors + bonus_factors)
+        score = min((base_score * very_low_alt_mult), 30)
+        debug_score = base_score * very_low_alt_mult
+        
+        
+        if score < 5:
+            self.interesting = Interesting.IGNORE
+            return False
+        elif score < 10:
+            self.interesting = Interesting.NOT_INTERESTING
+            self.LATCHED_NOT_INTERESTING = True
+            self.LATCHED_INTERESTING = False
+        elif score <= 15
+            self.LATCHED_INTERESTING = False
+            self.LATCHED_NOT_INTERESTING = False
+            if self.interesting.value > 1:
+                self.interesting = Interesting.WATCHLIST
+            elif score > 12: self.Interesting = Interesting.WATCHLIST
+        elif score == 30:
+            self.interesting = Interesting.VERY_INTERESTING
+            self.LATCHED_INTERESTING = True
+            self.LATCHED_NOT_INTERESTING = False
+        elif score >= 20:
+            self.interesting = Interesting.INTERESTING
+            self.LATCHED_INTERESTING = True
+            self.LATCHED_NOT_INTERESTING = False
+            
+        if self.interesting.value > 0:
+            return True
+        else:
+            return False
+            
+        
+        
         
         
 
