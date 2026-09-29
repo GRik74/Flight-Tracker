@@ -25,7 +25,7 @@ class Aircraft():
 
         self.altitude_available = True if isinstance(self.altitude, (int, float)) else False
         self.groundspeed_available = True if isinstance(self.groundspeed, (int, float)) else False
-        self.distance_available = True if self.lat != "unknown" and self.lon != "unknown" else False
+        self.distance_available = True if isinstance(self.lat, (int, float)) and isinstance(self.lon, (int, float)) else False
         self.relational_info_available = True if self.distance_available and isinstance(self.track, (int, float)) else False
 
         if self.distance_available:
@@ -55,10 +55,10 @@ class Aircraft():
 
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be ignored
         if not self.distance_available or not self.altitude_available or not self.groundspeed_available:
-            self.interesting = Interestingness.IGNORE
+            self.interesting = Interesting.IGNORE
             return False
 
-        ##### Algorithm - Not fully implemented yet, only sets Interestingness enum value #####
+        ##### Algorithm - Not fully implemented yet, only sets Interesting enum value #####
 
         # Positional factors - where it is
         dist_factor = min((20.0 - self.distance)/2, 0.0) * 0.4 if self.distance_available else 0.0
@@ -82,9 +82,9 @@ class Aircraft():
             elif self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None:
                 return True
             elif isinstance(self.groundspeed, (int, float)):
-                if self.groundspeed < 200 and self.distance < 8:# and is_closing
+                if self.groundspeed < 200 and self.distance < 8 and self.is_closing:
                     return True
-                elif self.groundspeed > 600:# and is_closing
+                elif self.groundspeed > 600 and self.is_closing:
                     return True
             
         return False
@@ -127,7 +127,7 @@ class Aircraft():
         # Check flight number to determine whether it is a commercial flight or not (if it is, check flight number against known flights to determine origin/destination)
 
 
-class Interestingness(Enum):
+class Interesting(Enum):
     IGNORE = -1
     NOT_INTERESTING = 0
     WATCHLIST = 1
