@@ -3,6 +3,8 @@ from enum import Enum
 
 class Aircraft():
     def __init__(self, plane_data, home_lat, home_lon):
+        ### Eventually: move data getters to separate "update" method and call that method during initialization; first step towards planning for persistence
+        
         self.Interesting = Interestingness.NOT_INTERESTING
         self.plane = plane_data
         self.hex_code = self.plane.get("hex", "unknown")
@@ -36,6 +38,10 @@ class Aircraft():
         self.is_interesting = self.determine_interesting()
 
 
+    # def update_attrributes(self, home_lat, home_lon):
+        
+
+
     def determine_interesting(self):
         """
             Current Function: Determines whether a plane is interesting based on decision tree.
@@ -61,19 +67,35 @@ class Aircraft():
         ##### Algorithm - Not fully implemented yet, only sets Interesting enum value #####
 
         # Positional factors - where it is
-        dist_factor = min((20.0 - self.distance)/2, 0.0) * 0.4 if self.distance_available else 0.0
-        alt_factor = min((25 - self.altitude/10000)/2.5, 0.0) * 0.2 if self.altitude_available else 0.0
-        aob_factor = ((90 - self.angle_on_bow)/9) * 0.2 if self.relational_info_available else 0.0
+        dist_factor = max((20.0 - self.distance)/2, 0.0) * 0.5 if self.distance_available else 0.0
+        alt_factor = max((25 - self.altitude/10000)/2.5, 0.0) * 0.2 if self.altitude_available else 0.0
+        aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
+        
         pos_factors = (dist_factor + alt_factor + aob_factor) * 0.6
+
 
         # Behavioral factors - what it's doing
         speed_factor = min((600 - self.groundspeed)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0
+        
+        behavioral_factors = (speed_factor) * 0.
+
 
         # Bonuses and special cases - things that make it more interesting than it would otherwise be
-        emergency_bonus = 2.0 if self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None else 0.0
-        closing_bonus = max(90 / self.angle_on_bow, 5) if self.is_closing else 0.0 # Possibly redundant due to aob_factor?
+        emergency_bonus = ((dist_factor/10) + 1) if self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None else 0.0
+        
+        bonus_factors = (emergency_bonus)
+        
+        
+        # Multipliers - things that have a non-linear effect on how interesting the plane might be
+        very_low_alt_mult = (5000 - self.altitude)/1000 if self.altitude < 5000 else 0.0
+        
+        
+        # State Assignment
+        base_score = (pos_factors + behavioral_factors + bonus_factors)
+        
+        
 
-        # Neanderthal decision tree for determining interesting-ness of a plane based on distance, altitude, emergency status, and groundspeed. Will be replaced with more sophisticated algorithm in future.
+        # Neanderthal decision tree for determining boolean interesting-ness of a plane based on distance, altitude, emergency status, and groundspeed. Will be replaced with more sophisticated algorithm in future.
         if self.distance_available:
             if self.distance <= 5:
                 return True
