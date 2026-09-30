@@ -4,7 +4,7 @@ from position import load_home_pos, get_CPA
 from aircraft import Aircraft
 # from math import round
 
-test_t, test_d, test_b = get_CPA(53.13, 5.0, 270, 60)  # Example coordinates and values
+test_t, test_d, test_b = get_CPA(53.13, 5.7539, 270, 60)  # Example coordinates and values
 print(f"Time to CPA: {test_t} hours\nDistance to CPA: {test_d} miles\nBearing to CPA: {test_b} degrees")
 
 AIRCRAFT_FILE = Path("/run/dump1090-fa/aircraft.json")
