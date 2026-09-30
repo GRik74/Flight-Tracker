@@ -7,6 +7,8 @@ DEBUG = True
 if DEBUG: import os
 # from math import round
 
+interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
+
 AIRCRAFT_FILE = Path("/run/dump1090-fa/aircraft.json")
 home_lat, home_lon = load_home_pos()
 
@@ -29,8 +31,8 @@ def show_planes(planes):
 
 def main():
     old_planes = []
-    interesting_planes = []
-    watchlist = []
+    interesting_planes = {}
+    watchlist = {}
     ACTIVE = True
 
     while ACTIVE:
@@ -44,22 +46,36 @@ def main():
             this_plane = Aircraft(plane)
             if this_plane.distance_available: planes.append(this_plane)
 
-            if this_plane.interesting.value > 0:
-                if this_plane not in interesting_planes:
-                    interesting_planes.append(this_plane)
-                    if this_plane in watchlist:
-                        watchlist.remove(this_plane)
+            if this_plane.interesting in interesting_states:
+                hex_code = this_plane.get("hex")
+
+                if hex_code in interesting_planes:
+                    interesting_planes[hex_code].update(plane)
+                    if hex_code in watchlist:
+                        del watchlist[hex_code]
                 else:
                     # Update the existing plane in interesting_planes with the new data
-                    index = interesting_planes.index(this_plane)
-                    interesting_planes[index].plane = this_plane.plane  # Update the plane data
-                    interesting_planes[index].update()
+                    interesting_planes[hex_code] = Aircraft(plane)  # Update the plane data
+            elif this_plane.interesting == Interesting.WATCHLIST:
+                if hex_code not in watchlist:
+                    if hex_code in interesting_planes:
+                        watchlist[hex_code] = interesting_planes[hex_code]
+                        watchlist[hex_code].update(plane)
+                        del interesting_planes[hex_code]
+                    else:
+                        watchlist[hex_code] = Aircraft(plane)
+                else:
+                    watchlist[hex_code].update(plane)
+
+                if hex_code in interesting_planes: del interesting_planes[hex_code]
+
             else:
-                if this_plane in interesting_planes:
-                    interesting_planes.remove(this_plane)
-                if this_plane.interesting == Interesting.WATCHLIST:
-                    if this_plane not in watchlist:
-                        watchlist.append(this_plane)
+                if hex_code in watchlist:
+                    del watchlist[hex_code]
+
+                if hex_code in interesting_planes:
+                    del interesting_planes[hex_code]
+
 
         print(f"Aircraft with known positions: {len(planes)}")
         if len(interesting_planes) == 0:
