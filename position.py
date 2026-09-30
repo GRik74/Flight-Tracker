@@ -56,3 +56,25 @@ def get_bearing(lat1, lon1, lat2, lon2):
     compass_bearing = (initial_bearing_degrees + 360) % 360
 
     return compass_bearing
+    
+    
+def get_CPA(bearing, distance, track, speed):
+    """
+    Calculate closest point of approach and time to reach that point.
+    
+    Returns tuple of time (in hours) and distance to CPA (in that order).
+    """
+    
+    b = radians(bearing)
+    c = radians(track)
+    
+    x = distance * sin(b)
+    y = distance * cos(b)
+    
+    vx = speed * sin(c)
+    vy = speed * cos(c)
+    
+    t = -((x * vx) + (y * vy)) / ((vx**2) + (vy**2))
+    D = ((x + (vx * t))**2 + (y + (vy * t))**2)
+    
+    return t, D
