@@ -17,7 +17,8 @@ def load_home_pos():
 def distance_miles(lat1, lon1, lat2, lon2):
     """
     Calculate the distance between point A and point B using the Haversine formula.
-    Returns the distance in miles.
+
+    Returns the distance in statute miles.
     """
 
 
@@ -39,6 +40,7 @@ def distance_miles(lat1, lon1, lat2, lon2):
 def get_bearing(lat1, lon1, lat2, lon2):
     """
     Calculate the bearing from point A (lat1, lon1) to point B (lat2, lon2).
+
     Returns the bearing in degrees (0-360).
     """
     lat1 = radians(lat1)
@@ -59,24 +61,36 @@ def get_bearing(lat1, lon1, lat2, lon2):
     
     
 def get_CPA(bearing, dist_miles, track, speed_kts):
-    “””
+    """
     Calculate closest point of approach and time to reach that point.
     
-    Returns tuple of time (in hours) and distance to CPA (in that order).
-    “””
+    Returns tuple of time (hours), distance (statute miles), and bearing (degrees 0-360) to CPA (in that order).
+    """
+
+    if speed_kts == 0:
+        return None, None, None
     
     speed_mph = speed_kts * 1.15078
-    
+
+    # Use vector math to calculate distance and time to closest point of approach (CPA)
     b = radians(bearing)
     c = radians(track)
     
     x = dist_miles * sin(b)
     y = dist_miles * cos(b)
-    
+
     vx = speed_mph * sin(c)
     vy = speed_mph * cos(c)
-    
+
+    # t < 0 indicates that the closest point of approach has already occurred
+    # t == 0 indicates that CPA is right now
     t = -((x * vx) + (y * vy)) / ((vx**2) + (vy**2))
     D = sqrt((x + (vx * t))**2 + (y + (vy * t))**2)
+
+    # Find the bearing to the CPA point by calculating CPA coordinates and finding the bearing angle of them
+    x_cpa = x + (vx * t)
+    y_cpa = y + (vy * t)
+
+    B = (degrees(atan2(x_cpa, y_cpa)) + 360) % 360
     
-    return t, D
+    return t, D, B

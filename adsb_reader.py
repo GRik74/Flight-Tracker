@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
-from position import load_home_pos
+from position import load_home_pos, get_CPA
 from aircraft import Aircraft
 # from math import round
 
+test_t, test_d, test_b = get_CPA(53.13, 5.0, 270, 60)  # Example coordinates and values
+print(f"Time to CPA: {test_t} hours\nDistance to CPA: {test_d} miles\nBearing to CPA: {test_b} degrees")
 
 AIRCRAFT_FILE = Path("/run/dump1090-fa/aircraft.json")
 home_lat, home_lon = load_home_pos()
@@ -37,9 +39,7 @@ def main():
     watchlist = []
 
     print(f"Aircraft heard: {len(aircraft)}")
-
-
-
+    
     for plane in aircraft:
         this_plane = Aircraft(plane)
         if this_plane.distance_available: planes.append(this_plane)
