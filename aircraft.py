@@ -4,17 +4,23 @@ from enum import Enum
 home_lat, home_lon = load_home_pos()
 
 class Aircraft():
-    # def __init__(self, plane_data, home_lat, home_lon):
     def __init__(self, plane_data):
-        ### Eventually: move data getters to separate "update" method and call that method during initialization; first step towards planning for persistence
-        
-        
         self.hex_code = plane_data.get("hex", "unknown")
-        # self.home_lat, self.home_lon = (home_lat, home_lon)
         self.LATCHED_NOT_INTERESTING = False
         self.LATCHED_INTERESTING = False
         
-        self.update(plane_data, persistent=False)
+        self.flight = None
+        self.altitude = None
+        self.groundspeed = None
+        self.track = None
+        self.emergency = None
+        self.lat = None
+        self.lon = None
+        
+        self.altitude_available = None
+        self.groundspeed_available = None
+        self.distance_available = None
+        self.relational_info_available = None
 
         self.distance = None
         self.bearing_to_plane = None
@@ -23,13 +29,11 @@ class Aircraft():
         self.relative_bearing = None
         self.is_closing = False
         self.closest_point_of_approach = {'distance': None, 'time': None, 'bearing': None}
-
-        if self.distance_available:
-            self.get_relational_info()
-
        
+        self.is_interesting = False
+    
+        self.update(plane_data, persistent=False)
         
-        self.is_interesting = self.determine_interesting() # self.determine_interesting(persistent=False)
 
 
     def update(self, plane_data, persistent=True):
@@ -41,6 +45,10 @@ class Aircraft():
         self.plane = plane_data
         
         self.update_adsb_values()
+        if self.distance_available:
+            self.update_relational_info()
+            
+        self.is_interesting = update_interesting()
         
         
     def update_adsb_values(self):
@@ -60,7 +68,7 @@ class Aircraft():
     
 
 
-    def determine_interesting(self, persistent=True):
+    def update_interesting(self, persistent=True):
         """
             Current Function: Determines whether a plane is interesting based on decision tree.
             
@@ -165,7 +173,7 @@ class Aircraft():
 
     
 
-    def get_relational_info(self):
+    def update_relational_info(self):
         """Sets relational information about the plane (distance, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
         self.distance = distance_miles(home_lat, home_lon, self.lat, self.lon)
         self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
