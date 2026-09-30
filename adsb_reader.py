@@ -41,7 +41,7 @@ def main():
 
 
     for plane in aircraft:
-        this_plane = Aircraft(plane, home_lat, home_lon)
+        this_plane = Aircraft(plane)
         if this_plane.distance_available: planes.append(this_plane)
         if this_plane.is_interesting: interesting_planes.append(this_plane)
 

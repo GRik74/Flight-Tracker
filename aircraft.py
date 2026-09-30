@@ -1,9 +1,13 @@
-from position import distance_miles, get_bearing, get_CPA
+from position import distance_miles, get_bearing, get_CPA, load_home_pos
 from enum import Enum
 
+home_lat, home_lon = load_home_pos()
+
 class Aircraft():
-    def __init__(self, plane_data, home_lat, home_lon):
+    # def __init__(self, plane_data, home_lat, home_lon):
+    def __init__(self, plane_data):
         ### Eventually: move data getters to separate "update" method and call that method during initialization; first step towards planning for persistence
+        
         
         self.hex_code = plane_data.get("hex", "unknown")
         # self.home_lat, self.home_lon = (home_lat, home_lon)
@@ -21,7 +25,7 @@ class Aircraft():
         self.closest_point_of_approach = {'distance': None, 'time': None, 'bearing': None}
 
         if self.distance_available:
-            self.get_relational_info(home_lat, home_lon)
+            self.get_relational_info()
 
        
         
@@ -36,7 +40,7 @@ class Aircraft():
         if persistent: self.old_plane = self.plane
         self.plane = plane_data
         
-        update_adsb_values()
+        self.update_adsb_values()
         
         
     def update_adsb_values(self):
@@ -161,7 +165,7 @@ class Aircraft():
 
     
 
-    def get_relational_info(self, home_lat, home_lon):
+    def get_relational_info(self):
         """Sets relational information about the plane (distance, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
         self.distance = distance_miles(home_lat, home_lon, self.lat, self.lon)
         self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
