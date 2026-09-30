@@ -8,6 +8,7 @@ class Aircraft():
         self.hex_code = plane_data.get("hex", "unknown")
         self.LATCHED_NOT_INTERESTING = False
         self.LATCHED_INTERESTING = False
+        self.interesting = Interesting.NOT_INTERESTING
         
         self.flight = None
         self.altitude = None
@@ -27,7 +28,7 @@ class Aircraft():
         self.recip_bearing = None
         self.angle_on_bow = None
         self.relative_bearing = None
-        self.is_closing = False
+        self.is_closing = None
         self.closest_point_of_approach = {'distance': None, 'time': None, 'bearing': None}
        
         self.is_interesting = False
@@ -48,11 +49,14 @@ class Aircraft():
         if self.distance_available:
             self.update_relational_info()
             
-        self.is_interesting = update_interesting()
+        self.is_interesting = self.update_interesting()
         
         
     def update_adsb_values(self):
-        if self.flight is None: self.flight = self.plane.get("flight", None).strip() or None
+        if self.flight is None:
+            self.flight = self.plane.get("flight")
+            self.flight = self.flight.strip() if isinstance(self.flight, str) else None
+            
         self.altitude = self.plane.get("alt_baro")
         self.groundspeed = self.plane.get("gs")
         self.track = self.plane.get("track")
@@ -182,8 +186,7 @@ class Aircraft():
         if self.relational_info_available:
             self.relative_bearing = (self.recip_bearing - self.track) % 360
             self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
-            if self.angle_on_bow < 90:
-                self.is_closing = True
+            self.is_closing = self.angle_on_bow < 90
                 # self.closest_point_of_approach = self.closest_point_of_approach(home_lat, home_lon)
 
 
