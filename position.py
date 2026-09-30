@@ -58,23 +58,25 @@ def get_bearing(lat1, lon1, lat2, lon2):
     return compass_bearing
     
     
-def get_CPA(bearing, distance, track, speed):
-    """
+def get_CPA(bearing, dist_miles, track, speed_kts):
+    “””
     Calculate closest point of approach and time to reach that point.
     
     Returns tuple of time (in hours) and distance to CPA (in that order).
-    """
+    “””
+    
+    speed_mph = speed_kts * 1.15078
     
     b = radians(bearing)
     c = radians(track)
     
-    x = distance * sin(b)
-    y = distance * cos(b)
+    x = dist_miles * sin(b)
+    y = dist_miles * cos(b)
     
-    vx = speed * sin(c)
-    vy = speed * cos(c)
+    vx = speed_mph * sin(c)
+    vy = speed_mph * cos(c)
     
     t = -((x * vx) + (y * vy)) / ((vx**2) + (vy**2))
-    D = ((x + (vx * t))**2 + (y + (vy * t))**2)
+    D = sqrt((x + (vx * t))**2 + (y + (vy * t))**2)
     
     return t, D
