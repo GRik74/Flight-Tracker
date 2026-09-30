@@ -6,6 +6,7 @@ class Aircraft():
         ### Eventually: move data getters to separate "update" method and call that method during initialization; first step towards planning for persistence
         
         self.hex_code = plane_data.get("hex", "unknown")
+        # self.home_lat, self.home_lon = (home_lat, home_lon)
         self.LATCHED_NOT_INTERESTING = False
         self.LATCHED_INTERESTING = False
         
@@ -52,7 +53,7 @@ class Aircraft():
         self.distance_available = True if self.lat is not None and self.lon is not None else False
         self.relational_info_available = True if self.distance_available and self.track is not None else False
         
-        
+    
 
 
     def determine_interesting(self, persistent=True):
