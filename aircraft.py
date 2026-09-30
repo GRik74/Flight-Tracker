@@ -1,21 +1,15 @@
-from position import distance_miles, get_bearing
+from position import distance_miles, get_bearing, get_CPA
 from enum import Enum
 
 class Aircraft():
     def __init__(self, plane_data, home_lat, home_lon):
         ### Eventually: move data getters to separate "update" method and call that method during initialization; first step towards planning for persistence
         
-        self.interesting = Interesting.NOT_INTERESTING
-        self.plane = plane_data
-        self.hex_code = self.plane.get("hex", "unknown")
-        self.flight = self.plane.get("flight", "").strip() or "unknown"
-        self.altitude = self.plane.get("alt_baro", "unknown")
-        self.groundspeed = self.plane.get("gs", "unknown")
-        self.track = self.plane.get("track", "unknown")
-        self.emergency = self.plane.get("emergency", "unknown")
-
-        self.lat = self.plane.get("lat", "unknown")
-        self.lon = self.plane.get("lon", "unknown")
+        self.hex_code = plane_data.get("hex", "unknown")
+        self.LATCHED_NOT_INTERESTING = False
+        self.LATCHED_INTERESTING = False
+        
+        self.update(plane_data, persistent=False)
 
         self.distance = None
         self.bearing_to_plane = None
@@ -25,21 +19,39 @@ class Aircraft():
         self.is_closing = False
         self.closest_point_of_approach = {'distance': None, 'time': None, 'bearing': None}
 
-        self.altitude_available = True if isinstance(self.altitude, (int, float)) else False
-        self.groundspeed_available = True if isinstance(self.groundspeed, (int, float)) else False
-        self.distance_available = True if isinstance(self.lat, (int, float)) and isinstance(self.lon, (int, float)) else False
-        self.relational_info_available = True if self.distance_available and isinstance(self.track, (int, float)) else False
-
         if self.distance_available:
             self.get_relational_info(home_lat, home_lon)
 
        
-        self.LATCHED_NOT_INTERESTING = False
-        self.LATCHED_INTERESTING = False
+        
         self.is_interesting = self.determine_interesting() # self.determine_interesting(persistent=False)
 
 
-    # def update_attributes(self, home_lat, home_lon):
+    def update(self, plane_data, persistent=True):
+        """
+        Main update method. Calls all individual update methods as required.
+        """
+        
+        if persistent: self.old_plane = self.plane
+        self.plane = plane_data
+        
+        update_adsb_values()
+        
+        
+    def update_adsb_values(self):
+        if self.flight is None: self.flight = self.plane.get("flight", None).strip() or None
+        self.altitude = self.plane.get("alt_baro")
+        self.groundspeed = self.plane.get("gs")
+        self.track = self.plane.get("track")
+        self.emergency = self.plane.get("emergency")
+        self.lat = self.plane.get("lat")
+        self.lon = self.plane.get("lon")
+        
+        self.altitude_available = True if self.altitude is not None else False
+        self.groundspeed_available = True if self.groundspeed is not None else False
+        self.distance_available = True if self.lat is not None and self.lon is not None else False
+        self.relational_info_available = True if self.distance_available and self.track is not None else False
+        
         
 
 
