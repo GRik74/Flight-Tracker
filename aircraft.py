@@ -1,4 +1,4 @@
-from position import distance_miles, get_bearing, get_CPA, load_home_pos
+from position import distance_nm, get_bearing, get_CPA, load_home_pos
 from enum import Enum
 
 home_lat, home_lon = load_home_pos()
@@ -11,8 +11,8 @@ class Aircraft():
         self.interesting = Interesting.NOT_INTERESTING
         
         self.flight = None
-        self.altitude = None
-        self.groundspeed = None
+        self.alt_ft = None
+        self.speed_kts = None
         self.track = None
         self.emergency = None
         self.lat = None
@@ -23,13 +23,13 @@ class Aircraft():
         self.distance_available = None
         self.relational_info_available = None
 
-        self.distance = None
+        self.dist_nm = None
         self.bearing_to_plane = None
         self.recip_bearing = None
         self.angle_on_bow = None
         self.relative_bearing = None
         self.is_closing = None
-        self.closest_point_of_approach = {'distance': None, 'time': None, 'bearing': None}
+        self.closest_point_of_approach = {'time_hr': None, 'dist_nm': None, 'bearing': None}
        
         self.is_interesting = False
     
@@ -57,15 +57,15 @@ class Aircraft():
             self.flight = self.plane.get("flight")
             self.flight = self.flight.strip() if isinstance(self.flight, str) else None
             
-        self.altitude = self.plane.get("alt_baro")
-        self.groundspeed = self.plane.get("gs")
+        self.alt_ft = self.plane.get("alt_baro")
+        self.speed_kts = self.plane.get("gs")
         self.track = self.plane.get("track")
         self.emergency = self.plane.get("emergency")
         self.lat = self.plane.get("lat")
         self.lon = self.plane.get("lon")
         
-        self.altitude_available = True if self.altitude is not None else False
-        self.groundspeed_available = True if self.groundspeed is not None else False
+        self.altitude_available = True if self.alt_ft is not None else False
+        self.groundspeed_available = True if self.speed_kts is not None else False
         self.distance_available = True if self.lat is not None and self.lon is not None else False
         self.relational_info_available = True if self.distance_available and self.track is not None else False
         
@@ -98,15 +98,15 @@ class Aircraft():
         ##### Algorithm - Not fully implemented yet, only sets Interesting enum value #####
 
         # Positional factors - where it is
-        dist_factor = max((20.0 - self.distance), 0.0) * 0.5 if self.distance_available else 0.0
-        alt_factor = max((25000 - self.altitude)/2000, 0.0) * 0.2 if self.altitude_available else 0.0
+        dist_factor = max((20.0 - self.dist_nm), 0.0) * 0.5 if self.distance_available else 0.0
+        alt_factor = max((25000 - self.alt_ft)/2000, 0.0) * 0.2 if self.altitude_available else 0.0
         aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
         
         pos_factors = (dist_factor + alt_factor + aob_factor) * 0.8
 
 
         # Behavioral factors - what it's doing
-        speed_factor = max((600 - self.groundspeed)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0
+        speed_factor = max((600 - self.speed_kts)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0
         
         behavioral_factors = (speed_factor) * 0.2
 
@@ -118,7 +118,7 @@ class Aircraft():
         
         
         # Multipliers - things that have a non-linear effect on how interesting the plane might be
-        very_low_alt_mult = 1 + ((5000 - self.altitude) * 0.00002) if self.altitude < 5000 else 1.0
+        very_low_alt_mult = 1 + ((5000 - self.alt_ft) * 0.00002) if self.alt_ft < 5000 else 1.0
         
         
         # State Assignment
@@ -159,18 +159,18 @@ class Aircraft():
         
         
 
-        # Neanderthal decision tree for determining boolean interesting-ness of a plane based on distance, altitude, emergency status, and groundspeed. Will be replaced with more sophisticated algorithm in future.
+        # Neanderthal decision tree for determining boolean interesting-ness of a plane based on dist_nm, altitude, emergency status, and speed_kts. Will be replaced with more sophisticated algorithm in future.
         if self.distance_available:
-            if self.distance <= 5:
+            if self.dist_nm <= 5:
                 return True
-            elif self.distance <= 15 and isinstance(self.altitude, (int, float)) and self.altitude < 15000:# and is_closing
+            elif self.dist_nm <= 15 and isinstance(self.alt_ft, (int, float)) and self.alt_ft < 15000:# and is_closing
                 return True
             elif self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None:
                 return True
-            elif isinstance(self.groundspeed, (int, float)):
-                if self.groundspeed < 200 and self.distance < 8 and self.is_closing:
+            elif isinstance(self.speed_kts, (int, float)):
+                if self.speed_kts < 200 and self.dist_nm < 8 and self.is_closing:
                     return True
-                elif self.groundspeed > 600 and self.is_closing:
+                elif self.speed_kts > 600 and self.is_closing:
                     return True
             
         return False
@@ -178,8 +178,8 @@ class Aircraft():
     
 
     def update_relational_info(self):
-        """Sets relational information about the plane (distance, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
-        self.distance = distance_miles(home_lat, home_lon, self.lat, self.lon)
+        """Sets relational information about the plane (dist_nm, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
+        self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
         self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
         self.recip_bearing = (self.bearing_to_plane + 180) % 360
 

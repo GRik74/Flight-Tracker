@@ -14,15 +14,15 @@ def load_home_pos():
     return float(lat_text), float(lon_text)
 
 
-def distance_miles(lat1, lon1, lat2, lon2):
+def distance_nm(lat1, lon1, lat2, lon2):
     """
     Calculate the distance between point A and point B using the Haversine formula.
 
-    Returns the distance in statute miles.
+    Returns the distance in nautical miles.
     """
 
 
-    earth_radius_miles = 3958.8
+    earth_radius_nm = 3440.065
 
     lat1 = radians(lat1)
     lon1 = radians(lon1)
@@ -35,7 +35,7 @@ def distance_miles(lat1, lon1, lat2, lon2):
     a = (sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2)
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
-    return earth_radius_miles * c
+    return earth_radius_nm * c
 
 def get_bearing(lat1, lon1, lat2, lon2):
     """
@@ -60,37 +60,35 @@ def get_bearing(lat1, lon1, lat2, lon2):
     return compass_bearing
     
     
-def get_CPA(bearing, dist_miles, track, speed_kts):
+def get_CPA(bearing, dist_nm, track, speed_kts):
     """
     Calculate closest point of approach and time to reach that point.
     
-    Returns tuple of time (hours), distance (statute miles), and bearing (degrees 0-360) to CPA (in that order).
+    Returns tuple of time (hours), distance (nautical miles), and bearing from house to plane (degrees 0-360) at CPA (in that order).
     """
 
     if speed_kts == 0:
         return None, None, None
-    
-    speed_mph = speed_kts * 1.15078
 
     # Use vector math to calculate distance and time to closest point of approach (CPA)
     b = radians(bearing)
     c = radians(track)
     
-    x = dist_miles * sin(b)
-    y = dist_miles * cos(b)
+    x = dist_nm * sin(b)
+    y = dist_nm * cos(b)
 
-    vx = speed_mph * sin(c)
-    vy = speed_mph * cos(c)
+    vx = speed_kts * sin(c)
+    vy = speed_kts * cos(c)
 
     # t < 0 indicates that the closest point of approach has already occurred
     # t == 0 indicates that CPA is right now
-    t = -((x * vx) + (y * vy)) / ((vx**2) + (vy**2))
-    D = sqrt((x + (vx * t))**2 + (y + (vy * t))**2)
+    time_to_CPA = -((x * vx) + (y * vy)) / ((vx**2) + (vy**2))
+    dist_nm_at_CPA = sqrt((x + (vx * time_to_CPA))**2 + (y + (vy * time_to_CPA))**2)
 
     # Find the bearing to the CPA point by calculating CPA coordinates and finding the bearing angle of them
-    x_cpa = x + (vx * t)
-    y_cpa = y + (vy * t)
+    x_cpa = x + (vx * time_to_CPA)
+    y_cpa = y + (vy * time_to_CPA)
 
-    B = (degrees(atan2(x_cpa, y_cpa)) + 360) % 360
+    bearing_at_CPA = (degrees(atan2(x_cpa, y_cpa)) + 360) % 360
     
-    return t, D, B
+    return time_to_CPA, dist_nm_at_CPA, bearing_at_CPA
