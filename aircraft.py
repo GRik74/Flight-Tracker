@@ -92,7 +92,7 @@ class Aircraft():
         if self.interesting == Interesting.IGNORE: return False
 
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be ignored
-        if not self.distance_available or not self.altitude_available or not self.groundspeed_available:
+        if not self.is_closing and (self.dist_nm > 10 or self.alt_ft > 25000):
             self.interesting = Interesting.IGNORE
             return False
 
