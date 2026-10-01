@@ -42,13 +42,16 @@ class Aircraft():
 
     def get_adsb_data(self, field_name, cur_val=None, is_numeric=True, persistent=True):
         field_value = self.plane.get(field_name)
-        if not isinstance(field_value, int, float):
-            if persistent:
-                field_value = cur_val
-                self.missing_data[field_name] = True
-                self.data_age[field_name] += 1
-            else:
-                field_value = None                       
+        if isinstance(field_value, (int, float)):
+            self.missing_data[field_name] = False
+            self.data_age[field_name] = 0
+
+        if persistent:
+            self.missing_data[field_name] = True
+            self.data_age[field_name] += 1
+            return cur_val
+
+        return None
 
 
     def update(self, plane_data, persistent=True):
@@ -73,11 +76,11 @@ class Aircraft():
             self.flight = self.flight.strip() if isinstance(self.flight, str) else None
 
         self.alt_ft = self.get_adsb_data("alt_baro", self.alt_ft, persistent=persistent)
-        self.speed_kts = self.get_adsb_data("gs", self.alt_ft, persistent=persistent)
-        self.track = self.get_adsb_data("track", self.alt_ft, persistent=persistent)
+        self.speed_kts = self.get_adsb_data("gs", self.speed_kts, persistent=persistent)
+        self.track = self.get_adsb_data("track", self.track, persistent=persistent)
         self.emergency = self.plane.get("emergency")
-        self.lat = self.get_adsb_data("lat", self.alt_ft, persistent=persistent)
-        self.lon = self.get_adsb_data("lon", self.alt_ft, persistent=persistent)
+        self.lat = self.get_adsb_data("lat", self.lat, persistent=persistent)
+        self.lon = self.get_adsb_data("lon", self.lon, persistent=persistent)
         
         self.altitude_available = True if self.alt_ft is not None else False
         self.groundspeed_available = True if self.speed_kts is not None else False
@@ -95,7 +98,7 @@ class Aircraft():
             self.relative_bearing = (self.recip_bearing - self.track) % 360
             self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
             self.is_closing = self.angle_on_bow < 90
-            self.CPA['time hr'], self.CPA['dist_nm'], self.CPA['bearing']= get_CPA(self.bearing_to_plane, self.dist_nm, self.track, self.speed_kts)
+            if self.groundspeed_available: self.CPA['time_hr'], self.CPA['dist_nm'], self.CPA['bearing']= get_CPA(self.bearing_to_plane, self.dist_nm, self.track, self.speed_kts)
 
         
     
