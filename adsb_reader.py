@@ -45,6 +45,7 @@ def main():
         
         for plane in aircraft:
             hex_code = plane.get("hex")
+            if not hex_code: continue
             # Pull plane data from interesting_planes/watchlist if exists (preserves any persistent data) or create new instance
             if hex_code in interesting_planes:
                 this_plane = interesting_planes[hex_code]
@@ -62,28 +63,14 @@ def main():
 
             # Determine if plane needs to be promoted, demoted, removed, or newly assigned
             if this_plane.interesting in interesting_states:
-                if hex_code in interesting_planes:
-                    interesting_planes[hex_code].update(plane)
-                    if hex_code in watchlist:
-                        del watchlist[hex_code]
-                else:
-                    interesting_planes[hex_code] = this_plane
-
-                if hex_code in buffer:
-                    del buffer[hex_code]
+                interesting_planes[hex_code] = this_plane
+                if hex_code in watchlist: del watchlist[hex_code]
+                if hex_code in buffer: del buffer[hex_code]
 
             elif this_plane.interesting == Interesting.WATCHLIST:
-                if hex_code not in watchlist:
-                    if hex_code in interesting_planes:
-                        watchlist[hex_code] = interesting_planes[hex_code]
-                        watchlist[hex_code].update(plane)
-                        del interesting_planes[hex_code]
-                    else:
-                        watchlist[hex_code] = this_plane
-                else:
-                    watchlist[hex_code].update(plane)
-
+                watchlist[hex_code] = this_plane
                 if hex_code in interesting_planes: del interesting_planes[hex_code]
+                if hex_code in buffer: del buffer[hex_code]
 
             elif this_plane.interesting == Interesting.IGNORE:
                 if hex_code in watchlist: del watchlist[hex_code]
@@ -92,15 +79,18 @@ def main():
 
             else:
                 if hex_code in buffer:
-                    if buffer[hex_code].buffer_grace > 5:
+                    buffer[hex_code] = this_plane
+                    if buffer[hex_code].buffer_grace >= buffer_threshold:
                         del buffer[hex_code]
                     else:
-                        buffer[hex_code].update(plane)
                         buffer[hex_code].buffer_grace += 1
                 elif hex_code in watchlist:
-
+                    this_plane.buffer_grace = 0
+                    buffer[hex_code] = this_plane
                     del watchlist[hex_code]
                 elif hex_code in interesting_planes:
+                    this_plane.buffer_grace = 0
+                    buffer[hex_code] = this_plane
                     del interesting_planes[hex_code]
 
             if hex_code in buffer and (hex_code in interesting_planes or hex_code in watchlist): del buffer[hex_code]
