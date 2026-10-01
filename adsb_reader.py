@@ -95,6 +95,7 @@ def main():
                     if buffer[hex_code].buffer_grace > 5:
                         del buffer[hex_code]
                     else:
+                        buffer[hex_code].update(plane)
                         buffer[hex_code].buffer_grace += 1
                 elif hex_code in watchlist:
 
