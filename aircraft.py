@@ -10,6 +10,9 @@ class Aircraft():
         self.LATCHED_INTERESTING = False
         self.interesting = Interesting.NOT_INTERESTING
         
+        self.data_age = {'alt_baro': 0, 'gs': 0, 'track': 0, 'emergency': 0, 'lat': 0, 'lon': 0}
+        self.missing_data = {'alt_baro': False, 'gs': False, 'track': False, 'emergency': False, 'lat': False, 'lon': False}
+
         self.flight = None
         self.alt_ft = None
         self.speed_kts = None
@@ -29,13 +32,23 @@ class Aircraft():
         self.angle_on_bow = None
         self.relative_bearing = None
         self.is_closing = None
-        self.closest_point_of_approach = {'time_hr': None, 'dist_nm': None, 'bearing': None}
+        self.CPA = {'time_hr': None, 'dist_nm': None, 'bearing': None}
        
         self.is_interesting = False
         self.buffer_grace = 0
     
         self.update(plane_data, persistent=False)
         
+
+    def get_adsb_data(self, field_name, cur_val=None, is_numeric=True, persistent=True):
+        field_value = self.plane.get(field_name)
+        if not isinstance(field_value, int, float):
+            if persistent:
+                field_value = cur_val
+                self.missing_data[field_name] = True
+                self.data_age[field_name] += 1
+            else:
+                field_value = None                       
 
 
     def update(self, plane_data, persistent=True):
@@ -46,29 +59,44 @@ class Aircraft():
         if persistent: self.old_plane = self.plane
         self.plane = plane_data
         
-        self.update_adsb_values()
+        self.update_adsb_values(persistent)
         if self.distance_available:
             self.update_relational_info()
             
         self.is_interesting = self.update_interesting()
         
         
-    def update_adsb_values(self):
+    def update_adsb_values(self, persistent=True):
+        # Update raw values from ADS-B/receiver
         if self.flight is None:
             self.flight = self.plane.get("flight")
             self.flight = self.flight.strip() if isinstance(self.flight, str) else None
-            
-        self.alt_ft = self.plane.get("alt_baro")
-        self.speed_kts = self.plane.get("gs")
-        self.track = self.plane.get("track")
+
+        self.alt_ft = self.get_adsb_data("alt_baro", self.alt_ft, persistent=persistent)
+        self.speed_kts = self.get_adsb_data("gs", self.alt_ft, persistent=persistent)
+        self.track = self.get_adsb_data("track", self.alt_ft, persistent=persistent)
         self.emergency = self.plane.get("emergency")
-        self.lat = self.plane.get("lat")
-        self.lon = self.plane.get("lon")
+        self.lat = self.get_adsb_data("lat", self.alt_ft, persistent=persistent)
+        self.lon = self.get_adsb_data("lon", self.alt_ft, persistent=persistent)
         
         self.altitude_available = True if self.alt_ft is not None else False
         self.groundspeed_available = True if self.speed_kts is not None else False
         self.distance_available = True if self.lat is not None and self.lon is not None else False
         self.relational_info_available = True if self.distance_available and self.track is not None else False
+
+
+    def update_relational_info(self):
+        """Sets relational information about the plane (dist_nm, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
+        self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
+        self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
+        self.recip_bearing = (self.bearing_to_plane + 180) % 360
+
+        if self.relational_info_available:
+            self.relative_bearing = (self.recip_bearing - self.track) % 360
+            self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
+            self.is_closing = self.angle_on_bow < 90
+            self.CPA['time hr'], self.CPA['dist_nm'], self.CPA['bearing']= get_CPA(self.bearing_to_plane, self.dist_nm, self.track, self.speed_kts)
+
         
     
 
@@ -92,8 +120,8 @@ class Aircraft():
         if self.interesting == Interesting.IGNORE: return False
 
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be ignored
-        if not self.is_closing and (self.dist_nm > 10 or self.alt_ft > 25000):
-            self.interesting = Interesting.IGNORE
+        if not self.altitude_available or not self.groundspeed_available or not self.distance_available or not self.relational_info_available:
+            self.interesting = Interesting.NOT_INTERESTING
             return False
 
         ##### Algorithm - Not fully implemented yet, only sets Interesting enum value #####
@@ -178,17 +206,6 @@ class Aircraft():
 
     
 
-    def update_relational_info(self):
-        """Sets relational information about the plane (dist_nm, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
-        self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
-        self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
-        self.recip_bearing = (self.bearing_to_plane + 180) % 360
-
-        if self.relational_info_available:
-            self.relative_bearing = (self.recip_bearing - self.track) % 360
-            self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
-            self.is_closing = self.angle_on_bow < 90
-                # self.closest_point_of_approach = self.closest_point_of_approach(home_lat, home_lon)
 
 
     # def get_rate_of_climb(self):
