@@ -7,8 +7,6 @@ DEBUG = True
 if DEBUG: import os
 # from math import round
 
-interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
-
 AIRCRAFT_FILE = Path("/run/dump1090-fa/aircraft.json")
 home_lat, home_lon = load_home_pos()
 
@@ -33,6 +31,9 @@ def main():
     old_planes = []
     interesting_planes = {}
     watchlist = {}
+    buffer = {}
+    buffer_threshold = 5
+    interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
     ACTIVE = True
 
     while ACTIVE:
@@ -43,19 +44,34 @@ def main():
         print(f"Aircraft heard: {len(aircraft)}")
         
         for plane in aircraft:
-            this_plane = Aircraft(plane)
-            if this_plane.distance_available: planes.append(this_plane)
+            hex_code = plane.get("hex")
+            # Pull plane data from interesting_planes/watchlist if exists (preserves any persistent data) or create new instance
+            if hex_code in interesting_planes:
+                this_plane = interesting_planes[hex_code]
+                this_plane.update(plane)
+            elif hex_code in watchlist:
+                this_plane = watchlist[hex_code]
+                this_plane.update(plane)
+            elif hex_code in buffer:
+                this_plane = buffer[hex_code]
+                this_plane.update(plane)
+            else:
+                this_plane = Aircraft(plane)
 
+            if this_plane.distance_available and this_plane.interesting != Interesting.IGNORE: planes.append(this_plane)
+
+            # Determine if plane needs to be promoted, demoted, removed, or newly assigned
             if this_plane.interesting in interesting_states:
-                hex_code = this_plane.get("hex")
-
                 if hex_code in interesting_planes:
                     interesting_planes[hex_code].update(plane)
                     if hex_code in watchlist:
                         del watchlist[hex_code]
                 else:
-                    # Update the existing plane in interesting_planes with the new data
-                    interesting_planes[hex_code] = Aircraft(plane)  # Update the plane data
+                    interesting_planes[hex_code] = this_plane
+
+                if hex_code in buffer:
+                    del buffer[hex_code]
+
             elif this_plane.interesting == Interesting.WATCHLIST:
                 if hex_code not in watchlist:
                     if hex_code in interesting_planes:
@@ -63,18 +79,30 @@ def main():
                         watchlist[hex_code].update(plane)
                         del interesting_planes[hex_code]
                     else:
-                        watchlist[hex_code] = Aircraft(plane)
+                        watchlist[hex_code] = this_plane
                 else:
                     watchlist[hex_code].update(plane)
 
                 if hex_code in interesting_planes: del interesting_planes[hex_code]
 
-            else:
-                if hex_code in watchlist:
-                    del watchlist[hex_code]
+            elif this_plane.interesting == Interesting.IGNORE:
+                if hex_code in watchlist: del watchlist[hex_code]
+                if hex_code in interesting_planes: del interesting_planes[hex_code]
+                if hex_code in buffer: del buffer[hex_code]
 
-                if hex_code in interesting_planes:
+            else:
+                if hex_code in buffer:
+                    if buffer[hex_code].buffer_grace > 5:
+                        del buffer[hex_code]
+                    else:
+                        buffer[hex_code].buffer_grace += 1
+                elif hex_code in watchlist:
+
+                    del watchlist[hex_code]
+                elif hex_code in interesting_planes:
                     del interesting_planes[hex_code]
+
+            if hex_code in buffer and (hex_code in interesting_planes or hex_code in watchlist): del buffer[hex_code]
 
 
         print(f"Aircraft with known positions: {len(planes)}")
@@ -87,7 +115,7 @@ def main():
                 print("No planes with valid distance information found.")
         else:
             print(f"Found {len(interesting_planes)} interesting planes:\n")
-            show_planes(interesting_planes)
+            show_planes(interesting_planes.values())
 
         RUN_AGAIN = input("\nRun again? (y/n): ").strip().lower()
         ACTIVE = True if RUN_AGAIN != "n" else False

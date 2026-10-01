@@ -32,6 +32,7 @@ class Aircraft():
         self.closest_point_of_approach = {'time_hr': None, 'dist_nm': None, 'bearing': None}
        
         self.is_interesting = False
+        self.buffer_grace = 0
     
         self.update(plane_data, persistent=False)
         
