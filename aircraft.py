@@ -36,6 +36,7 @@ class Aircraft():
        
         self.is_interesting = False
         self.buffer_grace = 0
+        self.missing_from_receiver = 0
     
         self.update(plane_data, persistent=False)
         
