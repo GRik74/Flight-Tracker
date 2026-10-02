@@ -44,7 +44,6 @@ class Aircraft():
         self.missing_from_receiver = 0
     
         self.update(plane_data, persistent=False)
-        self.interesting = self.update_interesting(persistent=False)
 
 
     ################## Getter Methods #######################
@@ -62,7 +61,7 @@ class Aircraft():
         self.update_calculated_values(persistent)
         self.update_relational_info(persistent)
             
-        self.is_interesting = self.update_interesting()
+        self.interesting = self.update_interesting(persistent)
         
         
     def update_adsb_values(self, persistent=True):
@@ -85,31 +84,35 @@ class Aircraft():
         self.altitude_available = True if self.alt_ft is not None and self.data_age['alt_baro'] < 10 else False
         self.groundspeed_available = True if self.speed_kts is not None and self.data_age['gs'] < 10 else False
         self.distance_available = True if self.lat is not None and self.lon is not None and self.data_age['lat'] < 5 and self.data_age['lon'] < 5 else False
-        self.relational_info_available = True if self.distance_available and self.track is not None and self.groundspeed_available else False
+        self.relational_info_available = True if self.distance_available and self.track is not None and self.groundspeed_available and self.data_age['track'] < 10 else False
 
     def update_calculated_values(self, persistent=True):
         """Updates calculated values based on ADS-B data (distance, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
 
-        if self.distance_available:
-            if not self.missing_data['lat'] and not self.missing_data['lon']:
-                self.based_on_estimates['lat']['is_estimated'], self.based_on_estimates['lon']['is_estimated'], self.based_on_estimates['dist_nm']['is_estimated'] = False, False, False
+        if self.distance_available and not self.missing_data['lat'] and not self.missing_data['lon']:
+            self.based_on_estimates['lat']['is_estimated'], self.based_on_estimates['lon']['is_estimated'], self.based_on_estimates['dist_nm']['is_estimated'] = False, False, False
+            self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
+            self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
+            self.recip_bearing = (self.bearing_to_plane + 180) % 360
                 # self.based_on_estimates['lat']['last_known'], self.based_on_estimates['lon']['last_known'] = self.lat, self.lon
-            elif persistent:
+        elif self.distance_available and persistent and self.groundspeed_available:
                 if not self.based_on_estimates['lat']['is_estimated']:
                     self.based_on_estimates['lat']['last_known'], self.based_on_estimates['lon']['last_known'] = self.lat, self.lon
+                    self.based_on_estimates['lat']['is_estimated'], self.based_on_estimates['lon']['is_estimated'] = True, True
 
                 self.lat, self.lon = estimate_new_position(self.lat, self.lon, self.track, self.speed_kts, (self.data_age['lat'] * time_between_cycles))
                 self.based_on_estimates['lat']['confidence'] = max((1 - (self.data_age['lat'] / 5)), 0.0)
                 self.based_on_estimates['lon']['confidence'] = max((1 - (self.data_age['lon'] / 5)), 0.0)
                 self.based_on_estimates['dist_nm']['confidence'] = (self.based_on_estimates['lat']['confidence'] + self.based_on_estimates['lon']['confidence']) / 2
-
-            self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
-            self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
-            self.recip_bearing = (self.bearing_to_plane + 180) % 360
+                
+                self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
+                self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
+                self.recip_bearing = (self.bearing_to_plane + 180) % 360
         else:
+            self.distance_info_available = False
             self.relational_info_available = False
 
-    def update_relational_info(self, persistent):
+    def update_relational_info(self, persistent=True):
         """Sets relational information about the plane (dist_nm, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
         if self.relational_info_available:
             self.relative_bearing = (self.recip_bearing - self.track) % 360
@@ -128,15 +131,21 @@ class Aircraft():
         """
 
         field_value = self.plane.get(field_name)
+        
         if isinstance(field_value, (int, float)):
             self.missing_data[field_name] = False
             self.data_age[field_name] = 0
             return field_value
-
+        
+        elif field_name == 'alt_baro' and field_value == 'ground':
+            self.missing_data[field_name] = False
+            self.data_age[field_name] = 0
+            return 0.0
+        
         else:
+            self.missing_data[field_name] = True
+            self.data_age[field_name] += 1
             if persistent:
-                self.missing_data[field_name] = True
-                self.data_age[field_name] += 1
                 return cur_val
 
         return None      
@@ -172,7 +181,7 @@ class Aircraft():
         if self.CPA['time_hr'] is not None and self.CPA['time_hr'] > 0 and self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 0:
             cpa_mins = self.CPA['time_hr'] * 60
             cpa_time_factor = max((10.0 - cpa_mins), 0.0) * 0.3
-            cpa_dist_factor = max((10.0 - self.CPA['dist_nm'])**1.5, 0.0) * 0.6
+            cpa_dist_factor = max((10.0 - self.CPA['dist_nm']), 0.0)**1.5 * 0.6
         else:
             cpa_time_factor = 0.0
             cpa_dist_factor = 0.0
@@ -198,40 +207,36 @@ class Aircraft():
         self.score = min((base_score * very_low_alt_mult), 30)
         self.debug_score = base_score * very_low_alt_mult
         
-        
+        # Still need to utilize latches (or just get rid of them)
         if self.score < 5:
             self.LATCHED_NOT_INTERESTING = True
             self.LATCHED_INTERESTING = False
             return Interesting.IGNORE
         elif self.score < 10:
-            self.interesting = Interesting.NOT_INTERESTING
             self.LATCHED_NOT_INTERESTING = True
             self.LATCHED_INTERESTING = False
             return Interesting.NOT_INTERESTING
         elif self.score <= 15:
             self.LATCHED_INTERESTING = False
             self.LATCHED_NOT_INTERESTING = False
-            if self.interesting.value > 1:
-                self.interesting = Interesting.WATCHLIST
-            elif self.score > 12: self.interesting = Interesting.WATCHLIST
+            return Interesting.WATCHLIST
         
         elif self.score == 30:
-            self.interesting = Interesting.VERY_INTERESTING
             self.LATCHED_INTERESTING = True
             self.LATCHED_NOT_INTERESTING = False
+            return Interesting.VERY_INTERESTING
         elif self.score >= 20:
-            self.interesting = Interesting.INTERESTING
             self.LATCHED_INTERESTING = True
             self.LATCHED_NOT_INTERESTING = False
+            return Interesting.INTERESTING
+
         elif self.score > 15:
-            self.interesting = Interesting.WATCHLIST
             self.LATCHED_INTERESTING = False
             self.LATCHED_NOT_INTERESTING = False
+            return Interesting.WATCHLIST
             
-        if self.interesting.value > 0:
-            return True
         else:
-            return False
+            return Interesting.WATCHLIST
 
     
 

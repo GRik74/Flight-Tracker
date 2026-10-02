@@ -88,6 +88,7 @@ def main():
                     if hex_code in tracked_planes: del tracked_planes[hex_code]
                     if DEBUG: planes_removed_this_cycle += 1
                 else:
+                    this_plane.buffer_grace += 1
                     tracked_planes[hex_code] = this_plane
 
                 # if hex_code in watchlist: del watchlist[hex_code]
@@ -111,23 +112,20 @@ def main():
                     hexes_to_remove.append(hex_code)
                 else:
                     tracked.missing_from_receiver += 1
-            
-            if list(tracked_planes.values()).count(tracked) > 1:
-                # Most likely not needed - in order for this to happen, the hex code would have to be exist in tracked_planes more than once at a time, which should not happen. But just in case...
-                if DEBUG: duplicate_hex_codes += 1
-                if hex_code not in hexes_to_remove: hexes_to_remove.append(hex_code)
+            else:
+                tracked.missing_from_receiver = 0
 
         if len(hexes_to_remove) > 0:
             for hex_code in hexes_to_remove:
                 if hex_code in tracked_planes: del tracked_planes[hex_code]
                 if DEBUG: planes_removed_this_cycle += 1
 
-
-        print(f"Aircraft with known positions: {len(planes)}")
+        positioned_planes = [plane for plane in planes if plane.distance_available]
+        print(f"Aircraft with known positions: {len(positioned_planes)}")
         planes_interesting = [plane for plane in planes if plane.interesting in interesting_states]
-        if len(planes_interesting) == 0:
+        if len(planes_interesting) == 0 and len(planes) > 0:
             print("No interesting planes found... Finding the closest plane instead...\n")
-            closest_plane = min(planes, key=lambda plane: plane.dist_nm if isinstance(plane.dist_nm, (int, float)) else float('inf'))
+            closest_plane = min(positioned_planes, key=lambda plane: plane.dist_nm if isinstance(plane.dist_nm, (int, float)) else float('inf'))
             show_planes([closest_plane])
         else:
             print(f"Tracked planes with potentially interesting status: {len(planes_interesting)}")
