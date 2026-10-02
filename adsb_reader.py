@@ -1,12 +1,11 @@
 import json
 from pathlib import Path
-from position import load_home_pos, get_CPA
+from position import load_home_pos# , get_CPA
 from aircraft import Aircraft, Interesting
 from garbage_collection import get_current_hex_codes
 
 DEBUG = True
 if DEBUG: import os
-# from math import round
 
 AIRCRAFT_FILE = Path("/run/dump1090-fa/aircraft.json")
 home_lat, home_lon = load_home_pos()
@@ -85,8 +84,10 @@ def main():
 
             elif this_plane.interesting == Interesting.IGNORE:
                 if this_plane.buffer_grace >= buffer_threshold:
-                    if hex_code in tracked_planes: del tracked_planes[hex_code]
-                    if DEBUG: planes_removed_this_cycle += 1
+                    if hex_code in tracked_planes:
+                        this_plane.interesting = Interesting.STOP_TRACKING
+                        tracked_planes[hex_code] = this_plane
+                    # if DEBUG: planes_removed_this_cycle += 1
                 else:
                     this_plane.buffer_grace += 1
                     tracked_planes[hex_code] = this_plane
@@ -97,8 +98,11 @@ def main():
 
             else:
                 if this_plane.buffer_grace >= buffer_threshold:
-                    if hex_code in tracked_planes: del tracked_planes[hex_code]
-                    if DEBUG: planes_removed_this_cycle += 1
+                    if hex_code in tracked_planes:
+                        this_plane.interesting = Interesting.STOP_TRACKING
+                        tracked_planes[hex_code] = this_plane
+
+                    # if DEBUG: planes_removed_this_cycle += 1
                 else:
                     this_plane.buffer_grace += 1
                     tracked_planes[hex_code] = this_plane
@@ -123,7 +127,7 @@ def main():
         positioned_planes = [plane for plane in planes if plane.distance_available]
         print(f"Aircraft with known positions: {len(positioned_planes)}")
         planes_interesting = [plane for plane in planes if plane.interesting in interesting_states]
-        if len(planes_interesting) == 0 and len(planes) > 0:
+        if len(planes_interesting) == 0 and len(positioned_planes) > 0:
             print("No interesting planes found... Finding the closest plane instead...\n")
             closest_plane = min(positioned_planes, key=lambda plane: plane.dist_nm if isinstance(plane.dist_nm, (int, float)) else float('inf'))
             show_planes([closest_plane])

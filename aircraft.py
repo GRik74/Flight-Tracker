@@ -54,14 +54,15 @@ class Aircraft():
         """
 
         self.age += 1
-        if persistent: self.old_plane = self.plane
-        self.plane = plane_data
-        
-        self.update_adsb_values(persistent)
-        self.update_calculated_values(persistent)
-        self.update_relational_info(persistent)
+        if self.interesting != Interesting.STOP_TRACKING:
+            if persistent: self.old_plane = self.plane
+            self.plane = plane_data
             
-        self.interesting = self.update_interesting(persistent)
+            self.update_adsb_values(persistent)
+            self.update_calculated_values(persistent)
+            self.update_relational_info(persistent)
+                
+            self.interesting = self.update_interesting(persistent)
         
         
     def update_adsb_values(self, persistent=True):
@@ -89,16 +90,26 @@ class Aircraft():
     def update_calculated_values(self, persistent=True):
         """Updates calculated values based on ADS-B data (distance, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
 
-        if self.distance_available and not self.missing_data['lat'] and not self.missing_data['lon']:
+        if self.distance_available and self.data_age['lat'] == 0 and self.data_age['lon'] == 0:
             self.based_on_estimates['lat']['is_estimated'], self.based_on_estimates['lon']['is_estimated'], self.based_on_estimates['dist_nm']['is_estimated'] = False, False, False
             self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
             self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
             self.recip_bearing = (self.bearing_to_plane + 180) % 360
                 # self.based_on_estimates['lat']['last_known'], self.based_on_estimates['lon']['last_known'] = self.lat, self.lon
-        elif self.distance_available and persistent and self.groundspeed_available:
-                if not self.based_on_estimates['lat']['is_estimated']:
-                    self.based_on_estimates['lat']['last_known'], self.based_on_estimates['lon']['last_known'] = self.lat, self.lon
-                    self.based_on_estimates['lat']['is_estimated'], self.based_on_estimates['lon']['is_estimated'] = True, True
+
+        elif self.distance_available and persistent and self.groundspeed_available and self.relational_info_available:
+                if not self.based_on_estimates['lat']['is_estimated'] and self.data_age['lat'] > 0:
+                    self.based_on_estimates['lat']['last_known'] = self.lat
+                    self.based_on_estimates['lat']['is_estimated'] = True
+
+                if not self.based_on_estimates['lon']['is_estimated'] and self.data_age['lon'] > 0:
+                    self.based_on_estimates['lon']['last_known'] = self.lon
+                    self.based_on_estimates['lon']['is_estimated'] = True
+
+                if self.based_on_estimates['lat']['is_estimated'] or self.based_on_estimates['lon']['is_estimated']:
+                    self.based_on_estimates['dist_nm']['is_estimated'] = True
+                elif not self.based_on_estimates['lat']['is_estimated'] and not self.based_on_estimates['lon']['is_estimated']:
+                    self.based_on_estimates['dist_nm']['is_estimated'] = False
 
                 self.lat, self.lon = estimate_new_position(self.lat, self.lon, self.track, self.speed_kts, (self.data_age['lat'] * time_between_cycles))
                 self.based_on_estimates['lat']['confidence'] = max((1 - (self.data_age['lat'] / 5)), 0.0)
@@ -109,7 +120,7 @@ class Aircraft():
                 self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
                 self.recip_bearing = (self.bearing_to_plane + 180) % 360
         else:
-            self.distance_info_available = False
+            self.distance_available = False
             self.relational_info_available = False
 
     def update_relational_info(self, persistent=True):
@@ -158,6 +169,8 @@ class Aircraft():
         # if self.interesting == Interesting.IGNORE: return False
 
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be set to not_interesting or ignore (if enough cycles have passed)
+        if self.interesting == Interesting.STOP_TRACKING: return self.interesting
+        
         if not self.altitude_available or not self.groundspeed_available or not self.distance_available or not self.relational_info_available:
             if self.interesting == Interesting.IGNORE: return Interesting.IGNORE
             if self.interesting == Interesting.NOT_INTERESTING:
@@ -265,6 +278,7 @@ class Aircraft():
 
 
 class Interesting(Enum):
+    STOP_TRACKING = -2
     IGNORE = -1
     NOT_INTERESTING = 0
     WATCHLIST = 1
