@@ -10,6 +10,8 @@ class Aircraft():
         self.LATCHED_NOT_INTERESTING = False
         self.LATCHED_INTERESTING = False
         self.interesting = Interesting.NOT_INTERESTING
+        self.score = 0.0
+        self.debug_score = 0.0
         
         self.age = 0
         self.data_age = {'alt_baro': 0, 'gs': 0, 'track': 0, 'emergency': 0, 'lat': 0, 'lon': 0}
@@ -149,29 +151,33 @@ class Aircraft():
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be set to not_interesting or ignore (if enough cycles have passed)
         if not self.altitude_available or not self.groundspeed_available or not self.distance_available or not self.relational_info_available:
             if self.interesting == Interesting.IGNORE: return Interesting.IGNORE
-            if self.interesting == Interesting.NOT_INTERESTING: return Interesting.NOT_INTERESTING
+            if self.interesting == Interesting.NOT_INTERESTING:
+                self.LATCHED_NOT_INTERESTING = True
+                return Interesting.NOT_INTERESTING
             if self.LATCHED_INTERESTING: self.LATCHED_INTERESTING = False
             return Interesting.NOT_INTERESTING
         if (self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0) and (self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 8) and not self.interesting == Interesting.IGNORE:
             return Interesting.IGNORE
-            
-
-        ##### Algorithm - Not fully implemented yet, only sets Interesting enum value #####
 
         # Positional factors - where it is
         dist_factor = max((20.0 - self.dist_nm), 0.0) * 0.5 if self.distance_available else 0.0
         alt_factor = max((25000 - self.alt_ft)/2000, 0.0) * 0.2 if self.altitude_available else 0.0
         aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
         
-        pos_factors = (dist_factor + alt_factor + aob_factor) * 0.8
+        pos_factors = (dist_factor + alt_factor + aob_factor) / 3
 
 
         # Behavioral factors - what it's doing
-        speed_factor = max((600 - self.speed_kts)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0
-        cpa_mins = self.CPA['time_hr'] * 60 if self.CPA['time_hr'] is not None else None
-        cpa_time_factor = max((10.0 - cpa_mins), 0.0) * 0.3 if cpa_mins is not None and cpa_mins > 0 else 0.0
-
-        behavioral_factors = (speed_factor + cpa_time_factor) * 0.2
+        speed_factor = max((600 - self.speed_kts)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0 # Need to remove or rework - doesn't make senseto favor faster aircraft just because they're fast
+        if self.CPA['time_hr'] is not None and self.CPA['time_hr'] > 0 and self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 0:
+            cpa_mins = self.CPA['time_hr'] * 60
+            cpa_time_factor = max((10.0 - cpa_mins), 0.0) * 0.3
+            cpa_dist_factor = max((10.0 - self.CPA['dist_nm'])**1.5, 0.0) * 0.6
+        else:
+            cpa_time_factor = 0.0
+            cpa_dist_factor = 0.0
+        
+        behavioral_factors = (speed_factor + cpa_time_factor + cpa_dist_factor) / 3
 
 
         # Bonuses and special cases - things that make it more interesting than it would otherwise be
@@ -184,35 +190,42 @@ class Aircraft():
         
         
         # Multipliers - things that have a non-linear effect on how interesting the plane might be
-        very_low_alt_mult = 1 + ((5000 - self.alt_ft) * 0.00002) if self.alt_ft < 5000 else 1.0
+        very_low_alt_mult = (1 + ((5000 - self.alt_ft) * 0.00002))**(max(cpa_dist_factor / 10, 1.0)) if self.alt_ft < 5000 else 1.0
         
         
         # State Assignment
         base_score = (pos_factors + behavioral_factors + bonus_factors)
-        score = min((base_score * very_low_alt_mult), 30)
-        debug_score = base_score * very_low_alt_mult
+        self.score = min((base_score * very_low_alt_mult), 30)
+        self.debug_score = base_score * very_low_alt_mult
         
         
-        if score < 5:
+        if self.score < 5:
+            self.LATCHED_NOT_INTERESTING = True
+            self.LATCHED_INTERESTING = False
             return Interesting.IGNORE
-        elif score < 10:
+        elif self.score < 10:
             self.interesting = Interesting.NOT_INTERESTING
             self.LATCHED_NOT_INTERESTING = True
             self.LATCHED_INTERESTING = False
             return Interesting.NOT_INTERESTING
-        elif score <= 15:
+        elif self.score <= 15:
             self.LATCHED_INTERESTING = False
             self.LATCHED_NOT_INTERESTING = False
             if self.interesting.value > 1:
                 self.interesting = Interesting.WATCHLIST
-            elif score > 12: self.interesting = Interesting.WATCHLIST
-        elif score == 30:
+            elif self.score > 12: self.interesting = Interesting.WATCHLIST
+        
+        elif self.score == 30:
             self.interesting = Interesting.VERY_INTERESTING
             self.LATCHED_INTERESTING = True
             self.LATCHED_NOT_INTERESTING = False
-        elif score >= 20:
+        elif self.score >= 20:
             self.interesting = Interesting.INTERESTING
             self.LATCHED_INTERESTING = True
+            self.LATCHED_NOT_INTERESTING = False
+        elif self.score > 15:
+            self.interesting = Interesting.WATCHLIST
+            self.LATCHED_INTERESTING = False
             self.LATCHED_NOT_INTERESTING = False
             
         if self.interesting.value > 0:

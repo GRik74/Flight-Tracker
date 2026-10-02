@@ -28,7 +28,7 @@ def show_planes(planes):
         plane_info += f" | GS: {str(int(round(plane.speed_kts, 0))):>8} kts" if plane.groundspeed_available else f" | GS: {'unknown':>8} kts"
 
         print(plane_info)
-        if DEBUG: print(f"-----------------------------\nDEBUG: {plane.hex_code} | Age: {plane.age} | Missing from receiver: {plane.missing_from_receiver} | Buffer grace: {plane.buffer_grace} | Interesting: {plane.interesting}\n-----------------------------")
+        if DEBUG: print(f"-----------------------------\nDEBUG: {plane.hex_code} | Age: {plane.age} | Missing from receiver: {plane.missing_from_receiver} | Buffer grace: {plane.buffer_grace} | Interesting: {plane.interesting} | Score: {plane.debug_score:.2f} \n-----------------------------")
 
 def main():
     tracked_planes = {}
