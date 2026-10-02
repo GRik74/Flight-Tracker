@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from position import load_home_pos# , get_CPA
+from position import load_home_pos
 from aircraft import Aircraft, Interesting
 from garbage_collection import get_current_hex_codes
 
@@ -31,9 +31,6 @@ def show_planes(planes):
 
 def main():
     tracked_planes = {}
-    # interesting_planes = {}
-    # watchlist = {}
-    # buffer = {}
     buffer_threshold = 15
     interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
     ACTIVE = True
@@ -65,36 +62,26 @@ def main():
             else:
                 this_plane = Aircraft(plane)
 
-            # if this_plane.distance_available and this_plane.interesting != Interesting.IGNORE: planes.append(this_plane)
             planes.append(this_plane)
 
             # Determine if plane needs to be updated, removed, or newly assigned
             if this_plane.interesting in interesting_states:
                 this_plane.buffer_grace = 0
                 tracked_planes[hex_code] = this_plane
-                # interesting_planes[hex_code] = this_plane
-                # if hex_code in watchlist: del watchlist[hex_code]
-                # if hex_code in buffer: del buffer[hex_code]
 
             elif this_plane.interesting == Interesting.WATCHLIST:
                 this_plane.buffer_grace = 0
                 tracked_planes[hex_code] = this_plane
-                # if hex_code in interesting_planes: del interesting_planes[hex_code]
-                # if hex_code in buffer: del buffer[hex_code]
 
             elif this_plane.interesting == Interesting.IGNORE:
                 if this_plane.buffer_grace >= buffer_threshold:
                     if hex_code in tracked_planes:
                         this_plane.interesting = Interesting.STOP_TRACKING
                         tracked_planes[hex_code] = this_plane
-                    # if DEBUG: planes_removed_this_cycle += 1
+
                 else:
                     this_plane.buffer_grace += 1
                     tracked_planes[hex_code] = this_plane
-
-                # if hex_code in watchlist: del watchlist[hex_code]
-                # if hex_code in interesting_planes: del interesting_planes[hex_code]
-                # if hex_code in buffer: del buffer[hex_code]
 
             else:
                 if this_plane.buffer_grace >= buffer_threshold:
@@ -102,7 +89,6 @@ def main():
                         this_plane.interesting = Interesting.STOP_TRACKING
                         tracked_planes[hex_code] = this_plane
 
-                    # if DEBUG: planes_removed_this_cycle += 1
                 else:
                     this_plane.buffer_grace += 1
                     tracked_planes[hex_code] = this_plane
