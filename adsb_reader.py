@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from position import load_home_pos, get_CPA
 from aircraft import Aircraft, Interesting
-from garbage_collection import get_current_hex_codes, check_existing_hex_codes
+from garbage_collection import get_current_hex_codes
 
 DEBUG = True
 if DEBUG: import os
@@ -28,6 +28,7 @@ def show_planes(planes):
         plane_info += f" | GS: {str(int(round(plane.speed_kts, 0))):>8} kts" if plane.groundspeed_available else f" | GS: {'unknown':>8} kts"
 
         print(plane_info)
+        if DEBUG: print(f"-----------------------------\nDEBUG: {plane.hex_code} | Age: {plane.age} | Missing from receiver: {plane.missing_from_receiver} | Buffer grace: {plane.buffer_grace} | Interesting: {plane.interesting}\n-----------------------------")
 
 def main():
     tracked_planes = {}
@@ -46,7 +47,7 @@ def main():
         planes_interesting = []
         hexes_to_remove = []
         if DEBUG:
-            planes_removed_this_cycle, stale_planes_count = 0, 0
+            planes_removed_this_cycle, stale_planes_count, duplicate_hex_codes = 0, 0, 0
             os.system("clear")
 
         # Check for stale/duplicate codes
@@ -110,6 +111,11 @@ def main():
                     hexes_to_remove.append(hex_code)
                 else:
                     tracked.missing_from_receiver += 1
+            
+            if list(tracked_planes.values()).count(tracked) > 1:
+                # Most likely not needed - in order for this to happen, the hex code would have to be exist in tracked_planes more than once at a time, which should not happen. But just in case...
+                if DEBUG: duplicate_hex_codes += 1
+                if hex_code not in hexes_to_remove: hexes_to_remove.append(hex_code)
 
         if len(hexes_to_remove) > 0:
             for hex_code in hexes_to_remove:
@@ -128,8 +134,12 @@ def main():
             show_planes(planes_interesting)
 
         if DEBUG:
+            print(f"\nDEBUG: Tracked planes this cycle: {len(tracked_planes)}")
             print(f"\nDEBUG: Stale planes this cycle: {stale_planes_count}")
+            print(f"DEBUG: Duplicate planes this cycle: {duplicate_hex_codes}")
             print(f"DEBUG: Planes removed this cycle: {planes_removed_this_cycle}")
+            oldest_plane = max(tracked_planes.values(), key=lambda plane: plane.age, default=None)
+            print(f"DEBUG: Oldest plane in tracked_planes: {oldest_plane.hex_code if oldest_plane else 'N/A'} (Age: {oldest_plane.age if oldest_plane else 'N/A'})")
 
         RUN_AGAIN = input("\nRun again? (y/n): ").strip().lower()
         ACTIVE = True if RUN_AGAIN != "n" else False

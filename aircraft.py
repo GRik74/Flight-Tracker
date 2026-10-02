@@ -10,8 +10,10 @@ class Aircraft():
         self.LATCHED_INTERESTING = False
         self.interesting = Interesting.NOT_INTERESTING
         
+        self.age = 0
         self.data_age = {'alt_baro': 0, 'gs': 0, 'track': 0, 'emergency': 0, 'lat': 0, 'lon': 0}
         self.missing_data = {'alt_baro': False, 'gs': False, 'track': False, 'emergency': False, 'lat': False, 'lon': False}
+        self.delta = {'alt_ft': 0, 'speed_kts': 0, 'track': 0, 'dist_nm': 0, 'bearing_to_plane': 0, 'angle_on_bow': 0, 'relative_bearing': 0}
 
         self.flight = None
         self.alt_ft = None
@@ -39,27 +41,16 @@ class Aircraft():
         self.missing_from_receiver = 0
     
         self.update(plane_data, persistent=False)
-        
 
-    def get_adsb_data(self, field_name, cur_val=None, is_numeric=True, persistent=True):
-        field_value = self.plane.get(field_name)
-        if isinstance(field_value, (int, float)):
-            self.missing_data[field_name] = False
-            self.data_age[field_name] = 0
 
-        if persistent:
-            self.missing_data[field_name] = True
-            self.data_age[field_name] += 1
-            return cur_val
-
-        return None
-
+    ################## Getter Methods #######################
 
     def update(self, plane_data, persistent=True):
         """
         Main update method. Calls all individual update methods as required.
         """
-        
+
+        self.age += 1
         if persistent: self.old_plane = self.plane
         self.plane = plane_data
         
@@ -73,6 +64,7 @@ class Aircraft():
     def update_adsb_values(self, persistent=True):
         # Update raw values from ADS-B/receiver
         if self.flight is None:
+            # If flight number is not already set, try to get it from plane data. If it is already set, don't update it (to avoid overwriting a previously set flight number with None if the receiver doesn't send it in this cycle)
             self.flight = self.plane.get("flight")
             self.flight = self.flight.strip() if isinstance(self.flight, str) else None
 
@@ -82,12 +74,29 @@ class Aircraft():
         self.emergency = self.plane.get("emergency")
         self.lat = self.get_adsb_data("lat", self.lat, persistent=persistent)
         self.lon = self.get_adsb_data("lon", self.lon, persistent=persistent)
-        
-        self.altitude_available = True if self.alt_ft is not None else False
-        self.groundspeed_available = True if self.speed_kts is not None else False
-        self.distance_available = True if self.lat is not None and self.lon is not None else False
+
+        # Set availability flags based on whether the data is available and how old it is (if it's too old, consider it unavailable)
+        # Lat and lon have a shorter age threshold because they are more critical for calculated values (distance, bearing, etc.). Stale data for lat and lon
+        #   can more readily lead to inaccurate values for any dependent values.
+        self.altitude_available = True if self.alt_ft is not None and self.data_age['alt_baro'] < 10 else False
+        self.groundspeed_available = True if self.speed_kts is not None and self.data_age['gs'] < 10 else False
+        self.distance_available = True if self.lat is not None and self.lon is not None and self.data_age['lat'] < 5 and self.data_age['lon'] < 5 else False
         self.relational_info_available = True if self.distance_available and self.track is not None else False
 
+    def update_calculated_values(self, persistent=True):
+        """Updates calculated values based on ADS-B data (distance, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
+
+        if self.distance_available:
+            self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
+            self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
+            self.recip_bearing = (self.bearing_to_plane + 180) % 360
+
+        if self.relational_info_available:
+            self.relative_bearing = (self.recip_bearing - self.track) % 360
+            self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
+            self.is_closing = self.angle_on_bow < 90
+            if self.groundspeed_available: 
+                self.CPA['time_hr'], self.CPA['dist_nm'], self.CPA['bearing'] = get_CPA(self.bearing_to_plane, self.dist_nm, self.track, self.speed_kts)
 
     def update_relational_info(self):
         """Sets relational information about the plane (dist_nm, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
@@ -101,9 +110,31 @@ class Aircraft():
             self.is_closing = self.angle_on_bow < 90
             if self.groundspeed_available: self.CPA['time_hr'], self.CPA['dist_nm'], self.CPA['bearing']= get_CPA(self.bearing_to_plane, self.dist_nm, self.track, self.speed_kts)
 
-        
-    
+    def get_adsb_data(self, field_name, cur_val=None, persistent=True):
+        """
+        Extract raw data from ADS-B receiver. 
+            -If value is not available, return previous value if persistent is True, otherwise return None. 
+            -If persistent is True and value is not available, increment data_age and set missing_data flag for that field.
+            -If value is available, resets data_age and missing_data flag for that field.
 
+        Should ensure that no numeric value can exist as non-numeric non-None value, thus avoiding most type errors
+        """
+
+        field_value = self.plane.get(field_name)
+        if isinstance(field_value, (int, float)):
+            self.missing_data[field_name] = False
+            self.data_age[field_name] = 0
+            return field_value
+
+        else:
+            if persistent:
+                self.missing_data[field_name] = True
+                self.data_age[field_name] += 1
+                return cur_val
+
+        return None      
+
+    ################ End Getter Methods ###################
 
     def update_interesting(self, persistent=True):
         """
@@ -186,27 +217,6 @@ class Aircraft():
             return True
         else:
             return False
-            
-        
-        
-        
-        
-
-        # Neanderthal decision tree for determining boolean interesting-ness of a plane based on dist_nm, altitude, emergency status, and speed_kts. Will be replaced with more sophisticated algorithm in future.
-        if self.distance_available:
-            if self.dist_nm <= 5:
-                return True
-            elif self.dist_nm <= 15 and isinstance(self.alt_ft, (int, float)) and self.alt_ft < 15000:# and is_closing
-                return True
-            elif self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None:
-                return True
-            elif isinstance(self.speed_kts, (int, float)):
-                if self.speed_kts < 200 and self.dist_nm < 8 and self.is_closing:
-                    return True
-                elif self.speed_kts > 600 and self.is_closing:
-                    return True
-            
-        return False
 
     
 
