@@ -1,7 +1,8 @@
-from position import distance_nm, get_bearing, get_CPA, load_home_pos
+from position import distance_nm, get_bearing, get_CPA, load_home_pos, estimate_new_position
 from enum import Enum
 
 home_lat, home_lon = load_home_pos()
+time_between_cycles = 1.0  # seconds between each cycle of the main loop in adsb_reader.py, used for estimating missing data/position extrapolation
 
 class Aircraft():
     def __init__(self, plane_data):
@@ -13,6 +14,7 @@ class Aircraft():
         self.age = 0
         self.data_age = {'alt_baro': 0, 'gs': 0, 'track': 0, 'emergency': 0, 'lat': 0, 'lon': 0}
         self.missing_data = {'alt_baro': False, 'gs': False, 'track': False, 'emergency': False, 'lat': False, 'lon': False}
+        self.based_on_estimates = {'lat': {'is_estimated': False, 'last_known': None, 'confidence': 0.0}, 'lon': {'is_estimated': False, 'last_known': None, 'confidence': 0.0}, 'dist_nm': {'is_estimated': False, 'last_known': None, 'confidence': 0.0}, 'alt_ft': {'is_estimated': False, 'last_known': None, 'confidence': 0.0}, 'track': {'is_estimated': False, 'last_known': None, 'confidence': 0.0}}
         self.delta = {'alt_ft': 0, 'speed_kts': 0, 'track': 0, 'dist_nm': 0, 'bearing_to_plane': 0, 'angle_on_bow': 0, 'relative_bearing': 0}
 
         self.flight = None
@@ -36,11 +38,11 @@ class Aircraft():
         self.is_closing = None
         self.CPA = {'time_hr': None, 'dist_nm': None, 'bearing': None}
        
-        self.is_interesting = False
         self.buffer_grace = 0
         self.missing_from_receiver = 0
     
         self.update(plane_data, persistent=False)
+        self.interesting = self.update_interesting(persistent=False)
 
 
     ################## Getter Methods #######################
@@ -55,8 +57,8 @@ class Aircraft():
         self.plane = plane_data
         
         self.update_adsb_values(persistent)
-        if self.distance_available:
-            self.update_relational_info()
+        self.update_calculated_values(persistent)
+        self.update_relational_info(persistent)
             
         self.is_interesting = self.update_interesting()
         
@@ -81,29 +83,32 @@ class Aircraft():
         self.altitude_available = True if self.alt_ft is not None and self.data_age['alt_baro'] < 10 else False
         self.groundspeed_available = True if self.speed_kts is not None and self.data_age['gs'] < 10 else False
         self.distance_available = True if self.lat is not None and self.lon is not None and self.data_age['lat'] < 5 and self.data_age['lon'] < 5 else False
-        self.relational_info_available = True if self.distance_available and self.track is not None else False
+        self.relational_info_available = True if self.distance_available and self.track is not None and self.groundspeed_available else False
 
     def update_calculated_values(self, persistent=True):
         """Updates calculated values based on ADS-B data (distance, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
 
         if self.distance_available:
+            if not self.missing_data['lat'] and not self.missing_data['lon']:
+                self.based_on_estimates['lat']['is_estimated'], self.based_on_estimates['lon']['is_estimated'], self.based_on_estimates['dist_nm']['is_estimated'] = False, False, False
+                # self.based_on_estimates['lat']['last_known'], self.based_on_estimates['lon']['last_known'] = self.lat, self.lon
+            elif persistent:
+                if not self.based_on_estimates['lat']['is_estimated']:
+                    self.based_on_estimates['lat']['last_known'], self.based_on_estimates['lon']['last_known'] = self.lat, self.lon
+
+                self.lat, self.lon = estimate_new_position(self.lat, self.lon, self.track, self.speed_kts, (self.data_age['lat'] * time_between_cycles))
+                self.based_on_estimates['lat']['confidence'] = max((1 - (self.data_age['lat'] / 5)), 0.0)
+                self.based_on_estimates['lon']['confidence'] = max((1 - (self.data_age['lon'] / 5)), 0.0)
+                self.based_on_estimates['dist_nm']['confidence'] = (self.based_on_estimates['lat']['confidence'] + self.based_on_estimates['lon']['confidence']) / 2
+
             self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
             self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
             self.recip_bearing = (self.bearing_to_plane + 180) % 360
+        else:
+            self.relational_info_available = False
 
-        if self.relational_info_available:
-            self.relative_bearing = (self.recip_bearing - self.track) % 360
-            self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
-            self.is_closing = self.angle_on_bow < 90
-            if self.groundspeed_available: 
-                self.CPA['time_hr'], self.CPA['dist_nm'], self.CPA['bearing'] = get_CPA(self.bearing_to_plane, self.dist_nm, self.track, self.speed_kts)
-
-    def update_relational_info(self):
+    def update_relational_info(self, persistent):
         """Sets relational information about the plane (dist_nm, bearing, angle on bow, etc.) if available. If not available, sets relational_info_available to False."""
-        self.dist_nm = distance_nm(home_lat, home_lon, self.lat, self.lon)
-        self.bearing_to_plane = get_bearing(home_lat, home_lon, self.lat, self.lon)
-        self.recip_bearing = (self.bearing_to_plane + 180) % 360
-
         if self.relational_info_available:
             self.relative_bearing = (self.recip_bearing - self.track) % 360
             self.angle_on_bow = min(self.relative_bearing, 360 - self.relative_bearing)
@@ -137,27 +142,19 @@ class Aircraft():
     ################ End Getter Methods ###################
 
     def update_interesting(self, persistent=True):
-        """
-            Current Function: Determines whether a plane is interesting based on decision tree.
-            
-            Returns boolean to indicate interesting/not interesting.
-
-            
-            Planned Function:
-                Run various methods related to position to get distance, closest approach, change in alt/speed, etc. to determine whether the plane is (or may become) interesting.
-                    -For each plane, assign a value for each 'interesting' attribute (from 0.0 to 10.0) that will sum to determine whether the plane is interesting, remains interesting, goes into watchlist, or isn't interesting at all
-                    -Average values for certain categories of attributes with appropriate weight, sum all category averages, possibly use multipliers or 'bonus' points based on certain attributes
-                    -Planes with closest approach > 15 miles or (alt > 25000 and closest approach > 5 miles) are assigned 0.0 (not interesting/impossible to become interesting) regardless of any other attributes
-                    -Enum for interesting-ness: create a class to hold the enum values for interesting-ness (can't become interesting, not currently interesting, watchlist, interesting, very interesting) and assign interesting-ness state
-                    -Latch interesting-ness state once threshold for 'interesting' passed, don't reset/downgrade state until interesting-ness score falls below some threshold to avoid repeated state flip-flops
-        """
+        # Takes data from plane and determines how 'interesting' it is.
         
-        if self.interesting == Interesting.IGNORE: return False
+        # if self.interesting == Interesting.IGNORE: return False
 
-        ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be ignored
+        ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be set to not_interesting or ignore (if enough cycles have passed)
         if not self.altitude_available or not self.groundspeed_available or not self.distance_available or not self.relational_info_available:
-            self.interesting = Interesting.NOT_INTERESTING
-            return False
+            if self.interesting == Interesting.IGNORE: return Interesting.IGNORE
+            if self.interesting == Interesting.NOT_INTERESTING: return Interesting.NOT_INTERESTING
+            if self.LATCHED_INTERESTING: self.LATCHED_INTERESTING = False
+            return Interesting.NOT_INTERESTING
+        if (self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0) and (self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 8) and not self.interesting == Interesting.IGNORE:
+            return Interesting.IGNORE
+            
 
         ##### Algorithm - Not fully implemented yet, only sets Interesting enum value #####
 
@@ -171,14 +168,19 @@ class Aircraft():
 
         # Behavioral factors - what it's doing
         speed_factor = max((600 - self.speed_kts)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0
-        
-        behavioral_factors = (speed_factor) * 0.2
+        cpa_mins = self.CPA['time_hr'] * 60 if self.CPA['time_hr'] is not None else None
+        cpa_time_factor = max((10.0 - cpa_mins), 0.0) * 0.3 if cpa_mins is not None and cpa_mins > 0 else 0.0
+
+        behavioral_factors = (speed_factor + cpa_time_factor) * 0.2
 
 
         # Bonuses and special cases - things that make it more interesting than it would otherwise be
         emergency_bonus = ((dist_factor/10) + 1) if self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None else 0.0
+        neg_cpa_time_bonus = 0.0
+        if self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0:
+            neg_cpa_time_bonus = 1.0 if self.CPA['dist_nm'] < 3 else -1.0
         
-        bonus_factors = (emergency_bonus)
+        bonus_factors = (emergency_bonus + neg_cpa_time_bonus)
         
         
         # Multipliers - things that have a non-linear effect on how interesting the plane might be
@@ -192,12 +194,12 @@ class Aircraft():
         
         
         if score < 5:
-            self.interesting = Interesting.IGNORE
-            return False
+            return Interesting.IGNORE
         elif score < 10:
             self.interesting = Interesting.NOT_INTERESTING
             self.LATCHED_NOT_INTERESTING = True
             self.LATCHED_INTERESTING = False
+            return Interesting.NOT_INTERESTING
         elif score <= 15:
             self.LATCHED_INTERESTING = False
             self.LATCHED_NOT_INTERESTING = False

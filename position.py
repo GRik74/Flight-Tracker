@@ -1,5 +1,5 @@
 from pathlib import Path
-from math import radians, sin, cos, sqrt, atan2, degrees
+from math import asin, radians, sin, cos, sqrt, atan2, degrees
 
 LOCATION_FILE = Path("location.txt")
 
@@ -59,7 +59,28 @@ def get_bearing(lat1, lon1, lat2, lon2):
 
     return compass_bearing
     
-    
+def estimate_new_position(lat, lon, track, speed_kts, time_elapsed_sec):
+    """
+    Estimate the new position of an aircraft given its last known position, track, speed, and time elapsed since position last known.
+
+    Returns a tuple containing the new latitude and longitude.
+    """
+    distance_nm = (speed_kts * time_elapsed_sec) / 3600.0  # Convert speed to nautical miles per second
+
+    lat = radians(lat)
+    lon = radians(lon)
+    track = radians(track)
+
+    earth_radius_nm = 3440.065
+
+    new_lat = asin(sin(lat) * cos(distance_nm / earth_radius_nm) +
+                   cos(lat) * sin(distance_nm / earth_radius_nm) * cos(track))
+
+    new_lon = lon + atan2(sin(track) * sin(distance_nm / earth_radius_nm) * cos(lat),
+                          cos(distance_nm / earth_radius_nm) - sin(lat) * sin(new_lat))
+
+    return degrees(new_lat), degrees(new_lon)
+
 def get_CPA(bearing, dist_nm, track, speed_kts):
     """
     Calculate closest point of approach and time to reach that point.
