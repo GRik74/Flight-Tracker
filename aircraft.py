@@ -1,6 +1,12 @@
 from position import distance_nm, get_bearing, get_CPA, load_home_pos, estimate_new_position
 from enum import Enum
 
+############################################################################
+# TODO:
+    # -calculate value deltas
+    # -assess whether flight number is likely commercial airline number
+############################################################################
+
 home_lat, home_lon = load_home_pos()
 time_between_cycles = 1.0  # seconds between each cycle of the main loop in adsb_reader.py, used for estimating missing data/position extrapolation
 
@@ -251,31 +257,6 @@ class Aircraft():
         else:
             return Interesting.WATCHLIST
 
-    
-
-
-
-    # def get_rate_of_climb(self):
-        # Use combo of ADS-B vertical rate output and recent altitude history to determine whether plane is climbing, descending, or level and at what rate (ft/min)
-
-    # def closest_point_of_approach(self, targ_lat, targ_lon):
-        # Find closest point of approach; Return distance, time to CPA, and bearing of of CPA
-
-
-    # def potentially_interesting(self):
-
-
-    # def flight_path_analysis(self):
-        # Only run if distance_available and relational_info_available are True and plane is 'interesting'
-        # Check plane's track, altitude, ground speed, coordinates, and recent history of those values to determine if it might be taking off or landing (very low alt but ascending + low speed but increasing, or descending from cruising alt + slowing down)
-        # If flight number available, check if coordinates + track + altitude correlate with origin/destination locations
-        # Check plane's coordinates and track to determine whether it might be heading toward preset locations (August, Charlotte, Atlanta, CAE, etc.)
-        
-
-
-    # def decode_flight_number(self):
-        # Check flight number to determine whether it is a commercial flight or not (if it is, check flight number against known flights to determine origin/destination)
-
 
 class Interesting(Enum):
     STOP_TRACKING = -2
@@ -284,4 +265,6 @@ class Interesting(Enum):
     WATCHLIST = 1
     INTERESTING = 2
     VERY_INTERESTING = 3
+    
 
+    
