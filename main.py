@@ -1,17 +1,12 @@
-from Aircraft.aircraft import Aircraft, Interesting
 from Aircraft.tracker import AircraftTracker
-from position import load_home_pos
 from adsb_reader import load_aircraft
 from output import show_planes
 
 DEBUG = True
 if DEBUG: import os
-home_lat, home_lon = load_home_pos()
 
 def main():
     tracker = AircraftTracker()
-    buffer_threshold = 15
-    interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
     ACTIVE = True
 
 ################# START MAIN PROGRAM LOOP #########################
@@ -24,10 +19,12 @@ def main():
 
         print(f"Aircraft heard: {len(aircraft)} | Tracked planes: {len(tracker.tracked_planes)}")
 
-        planes_interesting = [plane for plane in tracker.tracked_planes.values() if plane.interesting in interesting_states]
-        if len(planes_interesting) == 0 and len(tracker.tracked_planes) > 0:
+        positioned_planes = [plane for plane in tracker.current_planes if plane.distance_available and isinstance(plane.dist_nm, (int, float))]
+        print(f"Aircraft with known positions: {len(positioned_planes)}")
+        planes_interesting = [plane for plane in tracker.current_planes if plane.interesting in tracker.interesting_states]
+        if len(planes_interesting) == 0 and len(positioned_planes) > 0:
             print("No interesting planes found... Finding the closest plane instead...\n")
-            closest_plane = min(tracker.tracked_planes.values(), key=lambda plane: plane.dist_nm if isinstance(plane.dist_nm, (int, float)) else float('inf'))
+            closest_plane = min(positioned_planes, key=lambda plane: plane.dist_nm)
             show_planes([closest_plane])
         else:
             print(f"Tracked planes with potentially interesting status: {len(planes_interesting)}")

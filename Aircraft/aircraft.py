@@ -9,7 +9,6 @@ from enum import Enum
 
 home_lat, home_lon = load_home_pos()
 time_between_cycles = 1.0  # seconds between each cycle of the main loop in adsb_reader.py, used for estimating missing data/position extrapolation
-buffer_threshold = 30
 
 class Aircraft():
     def __init__(self, plane_data):
@@ -58,19 +57,18 @@ class Aircraft():
     def update(self, plane_data, persistent=True):
         """
         Main update method. Calls all individual update methods as required.
+        Refresh receiver values even when interest has reached STOP_TRACKING.
         """
 
         self.age += 1
-        if self.interesting != Interesting.STOP_TRACKING:
-            if persistent: self.old_plane = self.plane
-            self.plane = plane_data
-            
-            self.update_adsb_values(persistent)
-            self.update_calculated_values(persistent)
-            self.update_relational_info(persistent)
+        if persistent: self.old_plane = self.plane
+        self.plane = plane_data
 
-            self.update_plane_state()
-            self.interesting = self.update_interesting(persistent)
+        self.update_adsb_values(persistent)
+        self.update_calculated_values(persistent)
+        self.update_relational_info(persistent)
+
+        self.interesting = self.update_interesting(persistent)
         
         
     def update_adsb_values(self, persistent=True):
@@ -171,37 +169,6 @@ class Aircraft():
 
     ################ End Getter Methods ###################
 
-    def update_plane_state(self):
-            if self.interesting in interesting_states:
-                self.buffer_grace = 0
-                return self
-                # tracked_planes[hex_code] = this_plane
-
-            elif self.interesting == Interesting.WATCHLIST:
-                self.buffer_grace = 0
-                return self
-                # tracked_planes[hex_code] = this_plane
-
-            elif self.interesting == Interesting.IGNORE:
-                if self.buffer_grace >= buffer_threshold:
-                    self.interesting = Interesting.STOP_TRACKING
-                    return self
-
-                else:
-                    self.buffer_grace += 1
-                    return self
-
-            else:
-                if self.buffer_grace >= buffer_threshold:
-                    self.interesting = Interesting.STOP_TRACKING
-                    return self
-
-                else:
-                    self.buffer_grace += 1
-                    return self
-
-
-
     def update_interesting(self, persistent=True):
         # Takes data from plane and determines how 'interesting' it is.
         
@@ -298,7 +265,3 @@ class Interesting(Enum):
     WATCHLIST = 1
     INTERESTING = 2
     VERY_INTERESTING = 3
-    
-interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
-not_interesting_states = [Interesting.NOT_INTERESTING, Interesting.IGNORE]
-    
