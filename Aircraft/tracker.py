@@ -3,7 +3,8 @@
 from Aircraft.aircraft import Aircraft, Interesting
 
 DEBUG = True
-buffer_threshold = 30  # Grace cycles before stopping interest tracking or removing absent aircraft.
+interest_grace = 30  # Grace cycles before stopping interest tracking.
+missing_grace = 15 # Grace cycles before stale aircraft are removed from tracked_planes.
 
 def get_current_hex_codes(planes):
     codes = {
@@ -53,8 +54,8 @@ class AircraftTracker:
         if plane.interesting in self.interesting_states or plane.interesting == Interesting.WATCHLIST:
             plane.buffer_grace = 0
         elif plane.interesting != Interesting.STOP_TRACKING:
-            if plane.buffer_grace >= buffer_threshold:
-                plane.interesting = Interesting.STOP_TRACKING
+            if plane.buffer_grace >= interest_grace:
+                plane.interesting = plane.stop_tracking()
             else:
                 plane.buffer_grace += 1
 
@@ -63,7 +64,7 @@ class AircraftTracker:
         for hex_code in list(self.tracked_planes.keys()):
             plane = self.tracked_planes[hex_code]
             if hex_code not in self.current_codes:
-                if plane.missing_from_receiver >= buffer_threshold / 2:
+                if plane.missing_from_receiver >= missing_grace / 2:
                     del self.tracked_planes[hex_code]
 
                     if DEBUG:

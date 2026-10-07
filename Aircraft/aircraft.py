@@ -17,7 +17,12 @@ class Aircraft():
         self.LATCHED_INTERESTING = False
         self.interesting = Interesting.NOT_INTERESTING
         self.score = 0.0
-        self.debug_score = {}
+        self.debug_score = {
+            'proximity score': 0.0,
+            'altitude score': 0.0,
+            'closing prox. score': 0.0,
+            'closing time score': 0.0
+        }
         
         self.age = 0
         self.data_age = {'alt_baro': 0, 'gs': 0, 'track': 0, 'emergency': 0, 'lat': 0, 'lon': 0}
@@ -86,13 +91,13 @@ class Aircraft():
         self.lat = self.get_adsb_data("lat", self.lat, persistent=persistent)
         self.lon = self.get_adsb_data("lon", self.lon, persistent=persistent)
 
-        if self.interesting == Interesting.STOP_TRACKING: return
-
         # Set availability flags based on whether the data is available and how old it is (if it's too old, consider it unavailable)
         # Lat and lon have a shorter age threshold because they are more critical for calculated values (distance, bearing, etc.). Stale data for lat and lon
         #   can more readily lead to inaccurate values for any dependent values.
         self.altitude_available = True if self.alt_ft is not None and self.data_age['alt_baro'] < 10 else False
         self.groundspeed_available = True if self.speed_kts is not None and self.data_age['gs'] < 10 else False
+        if self.interesting == Interesting.STOP_TRACKING: return
+
         self.distance_available = True if self.lat is not None and self.lon is not None and self.data_age['lat'] < 5 and self.data_age['lon'] < 5 else False
         self.relational_info_available = True if self.distance_available and self.track is not None and self.groundspeed_available and self.data_age['track'] < 10 else False
 
@@ -176,7 +181,13 @@ class Aircraft():
         # Takes data from plane and determines how 'interesting' it is.
         
         # if self.interesting == Interesting.IGNORE: return False
-
+        self.score = 0.0
+        self.debug_score = {
+            'proximity score': 0.0,
+            'altitude score': 0.0,
+            'closing prox. score': 0.0,
+            'closing time score': 0.0
+        }
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be set to not_interesting or ignore (if enough cycles have passed)
         if self.interesting == Interesting.STOP_TRACKING: return self.interesting
         
@@ -194,7 +205,7 @@ class Aircraft():
         proximity_score = max((20 - self.dist_nm), 0.0) * 0.4 if self.distance_available else -5.0
         altitude_score = max((18000-self.alt_ft)/500, 0.0) * 0.3 if self.altitude_available else -2.0
         closing_proximity_score = max((10 - self.CPA['dist_nm']), 0.0) if self.CPA['dist_nm'] is not None and self.is_closing else -2.5
-        closing_time_score = max((15 - self.CPA['time_hr'])*1.1, 0.0) if self.CPA['time_hr'] is not None and self.is_closing else -2.5
+        closing_time_score = max((15 - (self.CPA['time_hr'] * 60))*1.1, 0.0) if self.CPA['time_hr'] is not None and self.is_closing else -2.5
 
         self.score = (
             proximity_score +
@@ -262,20 +273,27 @@ class Aircraft():
             self.LATCHED_INTERESTING = False
             self.LATCHED_NOT_INTERESTING = False
             return Interesting.WATCHLIST
+
+        elif self.score < 20:
+            if not self.LATCHED_INTERESTING: return Interesting.WATCHLIST
         
-        elif self.score == 30:
+        elif self.score >= 30:
             self.LATCHED_INTERESTING = True
             self.LATCHED_NOT_INTERESTING = False
             return Interesting.VERY_INTERESTING
+        
         elif self.score >= 20:
             self.LATCHED_INTERESTING = True
             self.LATCHED_NOT_INTERESTING = False
             return Interesting.INTERESTING
-
+        
         elif self.score > 15:
             self.LATCHED_INTERESTING = False
             self.LATCHED_NOT_INTERESTING = False
             return Interesting.WATCHLIST
+
+        elif self.score > 10:
+            if not self.LATCHED_NOT_INTERESTING: return Interesting.WATCHLIST
             
         else:
             return Interesting.WATCHLIST
