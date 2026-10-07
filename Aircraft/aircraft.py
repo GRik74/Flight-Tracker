@@ -17,7 +17,7 @@ class Aircraft():
         self.LATCHED_INTERESTING = False
         self.interesting = Interesting.NOT_INTERESTING
         self.score = 0.0
-        self.debug_score = 0.0
+        self.debug_score = {}
         
         self.age = 0
         self.data_age = {'alt_baro': 0, 'gs': 0, 'track': 0, 'emergency': 0, 'lat': 0, 'lon': 0}
@@ -65,6 +65,7 @@ class Aircraft():
         self.plane = plane_data
 
         self.update_adsb_values(persistent)
+        if self.interesting == Interesting.STOP_TRACKING: return
         self.update_calculated_values(persistent)
         self.update_relational_info(persistent)
 
@@ -84,6 +85,8 @@ class Aircraft():
         self.emergency = self.plane.get("emergency")
         self.lat = self.get_adsb_data("lat", self.lat, persistent=persistent)
         self.lon = self.get_adsb_data("lon", self.lon, persistent=persistent)
+
+        if self.interesting == Interesting.STOP_TRACKING: return
 
         # Set availability flags based on whether the data is available and how old it is (if it's too old, consider it unavailable)
         # Lat and lon have a shorter age threshold because they are more critical for calculated values (distance, bearing, etc.). Stale data for lat and lon
@@ -187,44 +190,64 @@ class Aircraft():
         if (self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0) and (self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 8) and not self.interesting == Interesting.IGNORE:
             return Interesting.IGNORE
 
-        # Positional factors - where it is
-        dist_factor = max((20.0 - self.dist_nm), 0.0) * 0.5 if self.distance_available else 0.0
-        alt_factor = max((25000 - self.alt_ft)/2000, 0.0) * 0.2 if self.altitude_available else 0.0
-        aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
+
+        proximity_score = max((20 - self.dist_nm), 0.0) * 0.4 if self.distance_available else -5.0
+        altitude_score = max((18000-self.alt_ft)/500, 0.0) * 0.3 if self.altitude_available else -2.0
+        closing_proximity_score = max((10 - self.CPA['dist_nm']), 0.0) if self.CPA['dist_nm'] is not None and self.is_closing else -2.5
+        closing_time_score = max((15 - self.CPA['time_hr'])*1.1, 0.0) if self.CPA['time_hr'] is not None and self.is_closing else -2.5
+
+        self.score = (
+            proximity_score +
+            altitude_score +
+            closing_proximity_score +
+            closing_time_score
+        )
+
+        self.debug_score = {
+            'proximity score': proximity_score,
+            'altitude score': altitude_score,
+            'closing prox. score': closing_proximity_score,
+            'closing time score': closing_time_score
+        }
+
+        # # Positional factors - where it is
+        # dist_factor = max((20.0 - self.dist_nm), 0.0) * 0.5 if self.distance_available else 0.0
+        # alt_factor = max((25000 - self.alt_ft)/2000, 0.0) * 0.2 if self.altitude_available else 0.0
+        # aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
         
-        pos_factors = (dist_factor + alt_factor + aob_factor) / 3
+        # pos_factors = (dist_factor + alt_factor + aob_factor) / 3
 
 
-        # Behavioral factors - what it's doing
-        speed_factor = max((600 - self.speed_kts)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0 # Need to remove or rework - doesn't make senseto favor faster aircraft just because they're fast
-        if self.CPA['time_hr'] is not None and self.CPA['time_hr'] > 0 and self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 0:
-            cpa_mins = self.CPA['time_hr'] * 60
-            cpa_time_factor = max((10.0 - cpa_mins), 0.0) * 0.3
-            cpa_dist_factor = max((10.0 - self.CPA['dist_nm']), 0.0)**1.5 * 0.6
-        else:
-            cpa_time_factor = 0.0
-            cpa_dist_factor = 0.0
+        # # Behavioral factors - what it's doing
+        # speed_factor = max((600 - self.speed_kts)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0 # Need to remove or rework - doesn't make senseto favor faster aircraft just because they're fast
+        # if self.CPA['time_hr'] is not None and self.CPA['time_hr'] > 0 and self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 0:
+        #     cpa_mins = self.CPA['time_hr'] * 60
+        #     cpa_time_factor = max((10.0 - cpa_mins), 0.0) * 0.3
+        #     cpa_dist_factor = max((10.0 - self.CPA['dist_nm']), 0.0)**1.5 * 0.6
+        # else:
+        #     cpa_time_factor = 0.0
+        #     cpa_dist_factor = 0.0
         
-        behavioral_factors = (speed_factor + cpa_time_factor + cpa_dist_factor) / 3
+        # behavioral_factors = (speed_factor + cpa_time_factor + cpa_dist_factor) / 3
 
 
-        # Bonuses and special cases - things that make it more interesting than it would otherwise be
-        emergency_bonus = ((dist_factor/10) + 1) if self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None else 0.0
-        neg_cpa_time_bonus = 0.0
-        if self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0:
-            neg_cpa_time_bonus = 1.0 if self.CPA['dist_nm'] < 3 else -1.0
+        # # Bonuses and special cases - things that make it more interesting than it would otherwise be
+        # emergency_bonus = ((dist_factor/10) + 1) if self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None else 0.0
+        # neg_cpa_time_bonus = 0.0
+        # if self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0:
+        #     neg_cpa_time_bonus = 1.0 if self.CPA['dist_nm'] < 3 else -1.0
         
-        bonus_factors = (emergency_bonus + neg_cpa_time_bonus)
-        
-        
-        # Multipliers - things that have a non-linear effect on how interesting the plane might be
-        very_low_alt_mult = (1 + ((5000 - self.alt_ft) * 0.00002))**(max(cpa_dist_factor / 10, 1.0)) if self.alt_ft < 5000 else 1.0
+        # bonus_factors = (emergency_bonus + neg_cpa_time_bonus)
         
         
-        # State Assignment
-        base_score = (pos_factors + behavioral_factors + bonus_factors)
-        self.score = min((base_score * very_low_alt_mult), 30)
-        self.debug_score = base_score * very_low_alt_mult
+        # # Multipliers - things that have a non-linear effect on how interesting the plane might be
+        # very_low_alt_mult = (1 + ((5000 - self.alt_ft) * 0.00002))**(max(cpa_dist_factor / 10, 1.0)) if self.alt_ft < 5000 else 1.0
+        
+        
+        # # State Assignment
+        # base_score = (pos_factors + behavioral_factors + bonus_factors)
+        # self.score = min((base_score * very_low_alt_mult), 30)
+        # self.debug_score = base_score * very_low_alt_mult
         
         # Still need to utilize latches (or just get rid of them)
         if self.score < 5:
@@ -256,6 +279,24 @@ class Aircraft():
             
         else:
             return Interesting.WATCHLIST
+
+    def stop_tracking(self):
+        self.interesting = Interesting.STOP_TRACKING
+        self.distance_available = False
+        self.relational_info_available = False
+
+        # self.dist_nm = None
+        # self.bearing_to_plane = None
+        # self.recip_bearing = None
+        # self.angle_on_bow = None
+        # self.relative_bearing = None
+        # self.is_closing = None
+        # self.CPA = {
+        #     'time_hr': None,
+        #     'dist_nm': None,
+        #     'bearing': None
+        # }
+
 
 
 class Interesting(Enum):

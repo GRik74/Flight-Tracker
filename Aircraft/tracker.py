@@ -3,7 +3,7 @@
 from Aircraft.aircraft import Aircraft, Interesting
 
 DEBUG = True
-buffer_threshold = 15  # Grace cycles before stopping interest tracking or removing absent aircraft.
+buffer_threshold = 30  # Grace cycles before stopping interest tracking or removing absent aircraft.
 
 def get_current_hex_codes(planes):
     codes = {
@@ -20,12 +20,14 @@ class AircraftTracker:
         self.adsb_data = []
         self.tracked_planes = {}
         self.current_planes = []
+        self.active = []
         self.interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
         self.current_codes = set()
 
     def update_tracked_planes(self, adsb_data):
         self.adsb_data = adsb_data
         self.current_planes = []
+        self.active = []
 
         self.current_codes = get_current_hex_codes(self.adsb_data)
 
@@ -41,6 +43,8 @@ class AircraftTracker:
             self.update_plane_state(this_plane)
             self.tracked_planes[hex_code] = this_plane
             self.current_planes.append(this_plane)
+            if this_plane.interesting != Interesting.STOP_TRACKING:
+                self.active.append(this_plane)
 
         self.remove_stale_planes()
 
@@ -59,7 +63,7 @@ class AircraftTracker:
         for hex_code in list(self.tracked_planes.keys()):
             plane = self.tracked_planes[hex_code]
             if hex_code not in self.current_codes:
-                if plane.missing_from_receiver >= buffer_threshold:
+                if plane.missing_from_receiver >= buffer_threshold / 2:
                     del self.tracked_planes[hex_code]
 
                     if DEBUG:
