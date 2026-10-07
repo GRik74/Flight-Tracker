@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import main
 from Aircraft.aircraft import Aircraft, Interesting, home_lat, home_lon
-from Aircraft.tracker import AircraftTracker, buffer_threshold
+from Aircraft.tracker import AircraftTracker, interesting_grace, missing_grace
 
 
 def plane_data(hex_code="abc123", offset=0.01):

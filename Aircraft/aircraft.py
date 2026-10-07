@@ -262,41 +262,19 @@ class Aircraft():
         
         # Still need to utilize latches (or just get rid of them)
         if self.score < 5:
-            self.LATCHED_NOT_INTERESTING = True
-            self.LATCHED_INTERESTING = False
             return Interesting.IGNORE
+        
         elif self.score < 10:
-            self.LATCHED_NOT_INTERESTING = True
-            self.LATCHED_INTERESTING = False
             return Interesting.NOT_INTERESTING
-        elif self.score <= 15:
-            self.LATCHED_INTERESTING = False
-            self.LATCHED_NOT_INTERESTING = False
-            return Interesting.WATCHLIST
-
+        
         elif self.score < 20:
-            if not self.LATCHED_INTERESTING: return Interesting.WATCHLIST
+            return Interesting.WATCHLIST
         
-        elif self.score >= 30:
-            self.LATCHED_INTERESTING = True
-            self.LATCHED_NOT_INTERESTING = False
-            return Interesting.VERY_INTERESTING
-        
-        elif self.score >= 20:
-            self.LATCHED_INTERESTING = True
-            self.LATCHED_NOT_INTERESTING = False
+        elif self.score < 30:
             return Interesting.INTERESTING
-        
-        elif self.score > 15:
-            self.LATCHED_INTERESTING = False
-            self.LATCHED_NOT_INTERESTING = False
-            return Interesting.WATCHLIST
 
-        elif self.score > 10:
-            if not self.LATCHED_NOT_INTERESTING: return Interesting.WATCHLIST
-            
         else:
-            return Interesting.WATCHLIST
+            return Interesting.VERY_INTERESTING
 
     def stop_tracking(self):
         self.interesting = Interesting.STOP_TRACKING

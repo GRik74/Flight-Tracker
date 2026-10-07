@@ -55,7 +55,7 @@ class AircraftTracker:
             plane.buffer_grace = 0
         elif plane.interesting != Interesting.STOP_TRACKING:
             if plane.buffer_grace >= interest_grace:
-                plane.interesting = plane.stop_tracking()
+                plane.stop_tracking()
             else:
                 plane.buffer_grace += 1
 
@@ -64,7 +64,7 @@ class AircraftTracker:
         for hex_code in list(self.tracked_planes.keys()):
             plane = self.tracked_planes[hex_code]
             if hex_code not in self.current_codes:
-                if plane.missing_from_receiver >= missing_grace / 2:
+                if plane.missing_from_receiver >= missing_grace:
                     del self.tracked_planes[hex_code]
 
                     if DEBUG:
