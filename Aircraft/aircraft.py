@@ -9,7 +9,6 @@ from enum import Enum
 
 home_lat, home_lon = load_home_pos()
 time_between_cycles = 1.0  # seconds between each cycle of the main loop in adsb_reader.py, used for estimating missing data/position extrapolation
-buffer_threshold = 30
 
 class Aircraft():
     def __init__(self, plane_data):
@@ -18,7 +17,12 @@ class Aircraft():
         self.LATCHED_INTERESTING = False
         self.interesting = Interesting.NOT_INTERESTING
         self.score = 0.0
-        self.debug_score = 0.0
+        self.debug_score = {
+            'proximity score': 0.0,
+            'altitude score': 0.0,
+            'closing prox. score': 0.0,
+            'closing time score': 0.0
+        }
         
         self.age = 0
         self.data_age = {'alt_baro': 0, 'gs': 0, 'track': 0, 'emergency': 0, 'lat': 0, 'lon': 0}
@@ -58,19 +62,19 @@ class Aircraft():
     def update(self, plane_data, persistent=True):
         """
         Main update method. Calls all individual update methods as required.
+        Refresh receiver values even when interest has reached STOP_TRACKING.
         """
 
         self.age += 1
-        if self.interesting != Interesting.STOP_TRACKING:
-            if persistent: self.old_plane = self.plane
-            self.plane = plane_data
-            
-            self.update_adsb_values(persistent)
-            self.update_calculated_values(persistent)
-            self.update_relational_info(persistent)
+        if persistent: self.old_plane = self.plane
+        self.plane = plane_data
 
-            self.update_plane_state()
-            self.interesting = self.update_interesting(persistent)
+        self.update_adsb_values(persistent)
+        if self.interesting == Interesting.STOP_TRACKING: return
+        self.update_calculated_values(persistent)
+        self.update_relational_info(persistent)
+
+        self.interesting = self.update_interesting(persistent)
         
         
     def update_adsb_values(self, persistent=True):
@@ -92,6 +96,8 @@ class Aircraft():
         #   can more readily lead to inaccurate values for any dependent values.
         self.altitude_available = True if self.alt_ft is not None and self.data_age['alt_baro'] < 10 else False
         self.groundspeed_available = True if self.speed_kts is not None and self.data_age['gs'] < 10 else False
+        if self.interesting == Interesting.STOP_TRACKING: return
+
         self.distance_available = True if self.lat is not None and self.lon is not None and self.data_age['lat'] < 5 and self.data_age['lon'] < 5 else False
         self.relational_info_available = True if self.distance_available and self.track is not None and self.groundspeed_available and self.data_age['track'] < 10 else False
 
@@ -171,42 +177,17 @@ class Aircraft():
 
     ################ End Getter Methods ###################
 
-    def update_plane_state(self):
-            if self.interesting in interesting_states:
-                self.buffer_grace = 0
-                return self
-                # tracked_planes[hex_code] = this_plane
-
-            elif self.interesting == Interesting.WATCHLIST:
-                self.buffer_grace = 0
-                return self
-                # tracked_planes[hex_code] = this_plane
-
-            elif self.interesting == Interesting.IGNORE:
-                if self.buffer_grace >= buffer_threshold:
-                    self.interesting = Interesting.STOP_TRACKING
-                    return self
-
-                else:
-                    self.buffer_grace += 1
-                    return self
-
-            else:
-                if self.buffer_grace >= buffer_threshold:
-                    self.interesting = Interesting.STOP_TRACKING
-                    return self
-
-                else:
-                    self.buffer_grace += 1
-                    return self
-
-
-
     def update_interesting(self, persistent=True):
         # Takes data from plane and determines how 'interesting' it is.
         
         # if self.interesting == Interesting.IGNORE: return False
-
+        self.score = 0.0
+        self.debug_score = {
+            'proximity score': 0.0,
+            'altitude score': 0.0,
+            'closing prox. score': 0.0,
+            'closing time score': 0.0
+        }
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be set to not_interesting or ignore (if enough cycles have passed)
         if self.interesting == Interesting.STOP_TRACKING: return self.interesting
         
@@ -220,75 +201,98 @@ class Aircraft():
         if (self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0) and (self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 8) and not self.interesting == Interesting.IGNORE:
             return Interesting.IGNORE
 
-        # Positional factors - where it is
-        dist_factor = max((20.0 - self.dist_nm), 0.0) * 0.5 if self.distance_available else 0.0
-        alt_factor = max((25000 - self.alt_ft)/2000, 0.0) * 0.2 if self.altitude_available else 0.0
-        aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
+
+        proximity_score = max((20 - self.dist_nm), 0.0) * 0.4 if self.distance_available else -5.0
+        altitude_score = max((18000-self.alt_ft)/500, 0.0) * 0.3 if self.altitude_available else -2.0
+        closing_proximity_score = max((10 - self.CPA['dist_nm']), 0.0) if self.CPA['dist_nm'] is not None and self.is_closing else -2.5
+        closing_time_score = max((15 - (self.CPA['time_hr'] * 60))*1.1, 0.0) if self.CPA['time_hr'] is not None and self.is_closing else -2.5
+
+        self.score = (
+            proximity_score +
+            altitude_score +
+            closing_proximity_score +
+            closing_time_score
+        )
+
+        self.debug_score = {
+            'proximity score': proximity_score,
+            'altitude score': altitude_score,
+            'closing prox. score': closing_proximity_score,
+            'closing time score': closing_time_score
+        }
+
+        # # Positional factors - where it is
+        # dist_factor = max((20.0 - self.dist_nm), 0.0) * 0.5 if self.distance_available else 0.0
+        # alt_factor = max((25000 - self.alt_ft)/2000, 0.0) * 0.2 if self.altitude_available else 0.0
+        # aob_factor = ((90 - self.angle_on_bow)/9) * 0.3 if self.relational_info_available else 0.0
         
-        pos_factors = (dist_factor + alt_factor + aob_factor) / 3
+        # pos_factors = (dist_factor + alt_factor + aob_factor) / 3
 
 
-        # Behavioral factors - what it's doing
-        speed_factor = max((600 - self.speed_kts)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0 # Need to remove or rework - doesn't make senseto favor faster aircraft just because they're fast
-        if self.CPA['time_hr'] is not None and self.CPA['time_hr'] > 0 and self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 0:
-            cpa_mins = self.CPA['time_hr'] * 60
-            cpa_time_factor = max((10.0 - cpa_mins), 0.0) * 0.3
-            cpa_dist_factor = max((10.0 - self.CPA['dist_nm']), 0.0)**1.5 * 0.6
-        else:
-            cpa_time_factor = 0.0
-            cpa_dist_factor = 0.0
+        # # Behavioral factors - what it's doing
+        # speed_factor = max((600 - self.speed_kts)/60, 0.0) * 0.1 if self.groundspeed_available else 0.0 # Need to remove or rework - doesn't make senseto favor faster aircraft just because they're fast
+        # if self.CPA['time_hr'] is not None and self.CPA['time_hr'] > 0 and self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 0:
+        #     cpa_mins = self.CPA['time_hr'] * 60
+        #     cpa_time_factor = max((10.0 - cpa_mins), 0.0) * 0.3
+        #     cpa_dist_factor = max((10.0 - self.CPA['dist_nm']), 0.0)**1.5 * 0.6
+        # else:
+        #     cpa_time_factor = 0.0
+        #     cpa_dist_factor = 0.0
         
-        behavioral_factors = (speed_factor + cpa_time_factor + cpa_dist_factor) / 3
+        # behavioral_factors = (speed_factor + cpa_time_factor + cpa_dist_factor) / 3
 
 
-        # Bonuses and special cases - things that make it more interesting than it would otherwise be
-        emergency_bonus = ((dist_factor/10) + 1) if self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None else 0.0
-        neg_cpa_time_bonus = 0.0
-        if self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0:
-            neg_cpa_time_bonus = 1.0 if self.CPA['dist_nm'] < 3 else -1.0
+        # # Bonuses and special cases - things that make it more interesting than it would otherwise be
+        # emergency_bonus = ((dist_factor/10) + 1) if self.emergency != "unknown" and self.emergency != "none" and self.emergency is not None else 0.0
+        # neg_cpa_time_bonus = 0.0
+        # if self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0:
+        #     neg_cpa_time_bonus = 1.0 if self.CPA['dist_nm'] < 3 else -1.0
         
-        bonus_factors = (emergency_bonus + neg_cpa_time_bonus)
-        
-        
-        # Multipliers - things that have a non-linear effect on how interesting the plane might be
-        very_low_alt_mult = (1 + ((5000 - self.alt_ft) * 0.00002))**(max(cpa_dist_factor / 10, 1.0)) if self.alt_ft < 5000 else 1.0
+        # bonus_factors = (emergency_bonus + neg_cpa_time_bonus)
         
         
-        # State Assignment
-        base_score = (pos_factors + behavioral_factors + bonus_factors)
-        self.score = min((base_score * very_low_alt_mult), 30)
-        self.debug_score = base_score * very_low_alt_mult
+        # # Multipliers - things that have a non-linear effect on how interesting the plane might be
+        # very_low_alt_mult = (1 + ((5000 - self.alt_ft) * 0.00002))**(max(cpa_dist_factor / 10, 1.0)) if self.alt_ft < 5000 else 1.0
+        
+        
+        # # State Assignment
+        # base_score = (pos_factors + behavioral_factors + bonus_factors)
+        # self.score = min((base_score * very_low_alt_mult), 30)
+        # self.debug_score = base_score * very_low_alt_mult
         
         # Still need to utilize latches (or just get rid of them)
         if self.score < 5:
-            self.LATCHED_NOT_INTERESTING = True
-            self.LATCHED_INTERESTING = False
             return Interesting.IGNORE
+        
         elif self.score < 10:
-            self.LATCHED_NOT_INTERESTING = True
-            self.LATCHED_INTERESTING = False
             return Interesting.NOT_INTERESTING
-        elif self.score <= 15:
-            self.LATCHED_INTERESTING = False
-            self.LATCHED_NOT_INTERESTING = False
+        
+        elif self.score < 20:
             return Interesting.WATCHLIST
         
-        elif self.score == 30:
-            self.LATCHED_INTERESTING = True
-            self.LATCHED_NOT_INTERESTING = False
-            return Interesting.VERY_INTERESTING
-        elif self.score >= 20:
-            self.LATCHED_INTERESTING = True
-            self.LATCHED_NOT_INTERESTING = False
+        elif self.score < 30:
             return Interesting.INTERESTING
 
-        elif self.score > 15:
-            self.LATCHED_INTERESTING = False
-            self.LATCHED_NOT_INTERESTING = False
-            return Interesting.WATCHLIST
-            
         else:
-            return Interesting.WATCHLIST
+            return Interesting.VERY_INTERESTING
+
+    def stop_tracking(self):
+        self.interesting = Interesting.STOP_TRACKING
+        self.distance_available = False
+        self.relational_info_available = False
+
+        # self.dist_nm = None
+        # self.bearing_to_plane = None
+        # self.recip_bearing = None
+        # self.angle_on_bow = None
+        # self.relative_bearing = None
+        # self.is_closing = None
+        # self.CPA = {
+        #     'time_hr': None,
+        #     'dist_nm': None,
+        #     'bearing': None
+        # }
+
 
 
 class Interesting(Enum):
@@ -298,7 +302,3 @@ class Interesting(Enum):
     WATCHLIST = 1
     INTERESTING = 2
     VERY_INTERESTING = 3
-    
-interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
-not_interesting_states = [Interesting.NOT_INTERESTING, Interesting.IGNORE]
-    
