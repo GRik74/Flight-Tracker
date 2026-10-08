@@ -1,5 +1,6 @@
 from position import distance_nm, get_bearing, get_CPA, load_home_pos, estimate_new_position
 from enum import Enum
+from math import isfinite
 
 ############################################################################
 # TODO:
@@ -198,6 +199,7 @@ class Aircraft():
             if self.interesting not in [Interesting.IGNORE, Interesting.STOP_TRACKING, Interesting.NOT_INTERESTING]:
                 if self.data_age['alt_baro'] >= data_age_demotion_threshold or self.data_age['track'] >= data_age_demotion_threshold or self.data_age['lat'] >= data_age_demotion_threshold or self.data_age['lon'] >= data_age_demotion_threshold or self.data_age['gs'] >= data_age_demotion_threshold:
                     return Interesting.WATCHLIST
+                return self.interesting
             else:
                 return Interesting.NOT_INTERESTING
         if (self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0) and (self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 8) and not self.interesting == Interesting.IGNORE:
@@ -208,25 +210,6 @@ class Aircraft():
         altitude_score = max((18000-self.alt_ft)/500, 0.0) * 0.3 if self.altitude_available else -2.0
         closing_proximity_score = max((10 - self.CPA['dist_nm']), 0.0) if self.CPA['dist_nm'] is not None and self.is_closing else -2.5
         closing_time_score = max((15 - (self.CPA['time_hr'] * 60))*1.1, 0.0) if self.CPA['time_hr'] is not None and self.is_closing else -2.5
-
-    # Modifiers - booleans that can make planes that either limit or boost state
-        # Speed mods
-        extremely_low_speed = (self.speed_kts <= 120)
-        low_speed = (self.speed_kts <= 150)
-
-        # Alt mods
-        low_alt = (self.alt_ft <= 10000)
-        extremely_low_alt = (self.alt_ft <= 7500)
-        very_high_alt = (self.alt_ft >= 30000)
-
-        # Dist mods
-        very_close = (self.dist_nm <= 2.5)
-        somewhat_close = (self.dist_nm <= 4.0 and self.is_closing)
-        not_close = (self.dist_nm >= 15.0)
-
-        # Behavior mods
-        possible_airliner_climb = (low_alt and (160 < self.speed_kts <= 300 ) and (self.dist_nm <= 10) and self.flight is not None)
-        possible_airliner_land = (extremely_low_alt and low_speed and (self.dist_nm <= 7) and self.flight is not None)
 
         self.score = (
             proximity_score +
@@ -242,34 +225,42 @@ class Aircraft():
             'closing time score': closing_time_score
         }
         
-        # Still need to utilize latches (or just get rid of them)
-        if self.score < 5:
+        # Apply visibility limits before any score or airport-pattern promotion.
+        if self.alt_ft <= 0 or self.speed_kts <= 0:
             return Interesting.IGNORE
-        
-        elif self.score < 10:
-            if possible_airliner_climb or possible_airliner_land: return Interesting.WATCHLIST
-            elif extremely_low_alt and (very_close or somewhat_close): return Interesting.WATCHLIST
-            else: return Interesting.NOT_INTERESTING
-        
-        elif self.score < 20:
-            if not_close or very_high_alt: return Interesting.WATCHLIST
-            if extremely_low_speed or low_speed and (not possible_airliner_climb or not possible_airliner_land): return Interesting.WATCHLIST
-            elif possible_airliner_land or possible_airliner_climb: return Interesting.INTERESTING
-            return Interesting.WATCHLIST
-        
-        elif self.score < 30:
-            if extremely_low_speed and not very_close: return Interesting.WATCHLIST
-            elif possible_airliner_land or possible_airliner_climb: return Interesting.INTERESTING
-            elif not_close or very_high_alt: return Interesting.WATCHLIST
-            else: return Interesting.INTERESTING
 
-        else:
-            if extremely_low_speed or low_speed:
-                if extremely_low_alt and (very_close or somewhat_close): return Interesting.INTERESTING
-                elif low_alt and very_close: return Interesting.INTERESTING
-                else: return Interesting.WATCHLIST
-            else:
-                return Interesting.VERY_INTERESTING
+        low_alt = (self.alt_ft <= 10000)
+        within_viewing_range = (self.dist_nm <= 8)
+        visible_soon = (self.dist_nm <= 15 and self.is_closing and
+                        self.CPA['time_hr'] is not None and 0 < self.CPA['time_hr'] <= 5 / 60 and
+                        self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] <= 8)
+        if not low_alt or not (within_viewing_range or visible_soon):
+            return Interesting.WATCHLIST if self.score >= 5 else Interesting.IGNORE
+
+        # Rates are optional receiver values; do not infer climb/descent from a callsign.
+        vertical_rate = self.plane.get('baro_rate')
+        if not isinstance(vertical_rate, (int, float)) or not isfinite(vertical_rate):
+            vertical_rate = self.plane.get('geom_rate')
+        rate_available = isinstance(vertical_rate, (int, float)) and isfinite(vertical_rate)
+        climbing = rate_available and vertical_rate >= 300
+        descending = rate_available and vertical_rate <= -300
+        viewing_speed = (180 <= self.speed_kts <= 300)
+        airport_movement = within_viewing_range and (
+            (climbing and 160 < self.speed_kts <= 300) or
+            (descending and 120 <= self.speed_kts <= 300)
+        )
+        if airport_movement:
+            return Interesting.VERY_INTERESTING
+        if viewing_speed:
+            return Interesting.VERY_INTERESTING if self.score >= 30 else Interesting.INTERESTING
+
+        # Slow final approaches remain candidates when vertical rate is unavailable.
+        possible_airliner_land = (within_viewing_range and self.alt_ft <= 7500 and
+                                  120 <= self.speed_kts < 180 and not rate_available and bool(self.flight))
+        very_near_low = (self.dist_nm <= 2.5 and self.alt_ft <= 7500 and 60 < self.speed_kts < 180)
+        if possible_airliner_land or very_near_low:
+            return Interesting.INTERESTING
+        return Interesting.WATCHLIST
 
     def stop_tracking(self):
         self.interesting = Interesting.STOP_TRACKING

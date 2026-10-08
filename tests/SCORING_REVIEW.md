@@ -1,94 +1,100 @@
-# Scoring review at 7609933
+# Visibility scoring and regression checks
 
-Run the suite from the repository root:
+Run from the repository root:
 
 ```sh
 python -B -m unittest discover -s tests -v
 ```
 
-The suite runs 24 tests: 20 pass normally and four are marked as expected
-failures for the findings below. Expected failures keep the unresolved behavior
-visible without requiring changes to production files. They should be removed
-when those findings are resolved or the intended policy is clarified.
+The suite now runs 36 tests with no expected failures. The four findings from
+reviewing 7609933 are ordinary passing regression tests. Production changes are
+confined to Aircraft.update_interesting() and one standard-library import; the
+score formula, aircraft fields, tracker lifecycle, and application structure
+remain in place.
 
-## Comparison and interpretation
+## Visibility policy
 
-`scoring_baselines.py` freezes the actual scoring methods from `0b87ae4` (the
-original refactor repair) and `942aab3` (immediately before the latest modifiers).
-The tests substitute only the scoring method, leaving receiver parsing and
-position calculations identical. The frozen methods were checked against the
-historical implementations on all 731 records in samples 1 through 9; both
-classifications and scores matched. Running the committed tests requires no Git
-history, network connection, or additional dependencies.
+The user's definition is naked-eye visibility now or shortly, generally below
+10,000 ft, within 8 nm, and between 180 and 300 kt. The implementation uses:
 
-Samples 5 through 9 contain 542 aircraft observations, including repeated
-aircraft across snapshots. The snapshots have no human interest labels, so the
-tests use a documented viewing proxy independent of assigned scores/states:
+- At or below 10,000 ft and within 8 nm as the current viewing region.
+- Inbound aircraft up to 15 nm away as candidates if their projected closest
+  approach is within 8 nm and occurs in the next five minutes. Altitude must
+  still be at or below 10,000 ft; no vertical-position extrapolation was added.
+- 180–300 kt as the preferred speed band. These aircraft are INTERESTING even
+  when the raw score is low because they are already visible but moving away.
+  Scores of 30 or more make them VERY_INTERESTING inside the visibility limits.
+- Nearby climbs of at least 300 ft/min at 160–300 kt (excluding exactly 160),
+  and descents of at least 300 ft/min at 120–300 kt, as VERY_INTERESTING.
+  Barometric rate is preferred, with geometric rate as a fallback. These are
+  airport-movement indicators, not confirmation of a particular airport.
+- Slow potential final approaches at 120–180 kt (excluding exactly 180) below
+  7,500 ft as INTERESTING when rate is unavailable and a nonempty callsign is
+  present. This preserves a limited approach heuristic without treating the
+  callsign as proof of climb or descent. With an available level-flight rate,
+  this exception does not apply.
+- Very close low aircraft within 2.5 nm, below 7,500 ft, and between 60 and
+  180 kt (exclusive endpoints) as another limited INTERESTING exception.
 
-- Within 10 nm, at or below 10,000 ft, and above 150 kt.
-- Within 4 nm and below 30,000 ft, with a projected pass within 2 nm in the next
-  three minutes, and above 150 kt.
-- Within 4 nm and at or below 7,500 ft, including slow aircraft.
+Visibility limits run before promotions, so high scores and receiver climb/
+descent rates cannot promote distant or high aircraft outside the viewing
+region. Grounded or stationary aircraft are ignored.
 
-All criteria require usable position, altitude, speed, and relational data.
-"Selected" means INTERESTING or VERY_INTERESTING; WATCHLIST is not counted.
+## Missing data and modifier fixes
 
-| Sample | Observations | Viewing candidates | Previous selections | Current selections | Current candidate hits |
+Every unavailable-data path returns before numeric scoring. An already active
+classification is held during a short data gap without recalculating or
+promoting it. Once any required data age reaches five cycles and data is
+unavailable, it becomes WATCHLIST. Previously uninteresting aircraft stay
+NOT_INTERESTING when data is unavailable. Scores/debug components are reset on
+these paths. Existing receiver persistence and availability thresholds remain.
+
+This prevents the nonpersistent missing-field TypeError. It also eliminates the
+unreachable landing promotion by applying distinct visibility and airport
+conditions rather than the conflicting climb/landing Boolean expression.
+The altitude, range, and speed restrictions apply regardless of score band.
+Malformed or nonfinite optional vertical rates do not trigger promotions.
+
+## Sample evidence
+
+The frozen methods from 0b87ae4 and 942aab3 remain in scoring_baselines.py.
+Only the scoring method is substituted during comparison; parsing and position
+calculations are identical. No Git history or network is required to run tests.
+The earlier validation matched these references to their historical versions
+on all 731 sample observations.
+
+Under the clarified visibility definition, samples 5–9 contain one candidate:
+N191CZ (a16c2c, sample5), descending at 768 ft/min, at 800 ft, 6.81 nm away,
+and 140.1 kt. Both historical baselines, and the unfixed 7609933 modifiers,
+missed this aircraft. The repair selects it as VERY_INTERESTING.
+
+| Sample | Observations | Visibility candidates | Pre-modifier selections (942aab3) | Fixed selections | Fixed candidate hits |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| sample5 | 134 | 0 | 2 | 0 | 0 |
+| sample5 | 134 | 1 | 2 | 1 | 1 |
 | sample6 | 131 | 0 | 2 | 0 | 0 |
-| sample7 | 94 | 1 | 2 | 1 | 1 |
+| sample7 | 94 | 0 | 2 | 0 | 0 |
 | sample8 | 108 | 0 | 4 | 0 | 0 |
-| sample9 | 75 | 2 | 4 | 2 | 2 |
-| Total | 542 | 3 | 14 | 3 | 3 |
+| sample9 | 75 | 0 | 4 | 0 | 0 |
+| Total | 542 | 1 | 14 | 1 | 1 |
 
-The three candidates are PDT5959 (`a857c2`, sample7), EDV5057 (`a2af3e`, sample9),
-and PDT5911 (`a944b9`, sample9). The first two are nearby low aircraft; the third
-is a close, imminent overhead pass. The original refactor classified none of
-them as interesting. Both the pre-modifier and current versions classify all
-three as interesting.
+The earlier review's three targets no longer satisfy the clarified criteria:
+PDT5959 and EDV5057 remain outside 8 nm and their projected passes also stay
+outside 8 nm; PDT5911 is at 25,950 ft. They now remain WATCHLIST.
 
-Consequently, the latest modifiers improve selection precision under this
-proxy from 3/14 to 3/3, preserving candidate coverage. They do **not** demonstrate
-an increase in interesting classifications over the immediately preceding
-version on these samples. The older refactor comparison does show improved
-coverage, from 0/3 to 3/3. Three positive observations are too few to establish
-general real-world accuracy, and these proxy labels are not human judgments.
+Samples 2 and 4 contribute five more nearby climb/descent candidates, all now
+selected. Across all nine snapshots the fix captures all six candidates under
+these criteria, versus two captured by the pre-modifier reference. Tests assert
+these individual aircraft as well as aggregate new-sample coverage. The suite
+also replays all nine snapshots through AircraftTracker for 35 cycles each to
+check classification and retention interaction.
 
-The synthetic tests separately exercise 18 nearby low departure scenarios
-(2/4/6 nm, 1,000/2,000 ft, 180/220/280 kt, heading away with a callsign). All
-score between 10 and 20: the previous method assigned WATCHLIST and the current
-method assigns INTERESTING. Additional tests cover distant/high cruise,
-initially missing data, and expired positions.
+Synthetic cases exercise 18 nearby departures, slow approaches, reported
+climb/descent with and without callsigns, rate fallbacks, visibility and speed
+boundaries, imminent passes, ground cases, partial/nonpersistent missing fields,
+and scores above 30 outside the permitted region.
 
-## Logic findings
-
-1. **Landing promotion blocked in the 10–20 band (`aircraft.py:256`).**
-   `low_speed and (not possible_airliner_climb or not possible_airliner_land)`
-   blocks every low-speed landing candidate. Climb requires speed above 160 kt;
-   landing requires speed at most 150 kt, so both predicates cannot be true.
-   Their negations joined with `or` therefore always evaluate true. A 140 kt,
-   2,000 ft aircraft 6 nm away reproduces the missed promotion. If the intent is
-   to exclude low-speed aircraft satisfying neither pattern, this Boolean
-   condition needs reconsideration, along with the separate <=120 kt override.
-
-2. **Missing-data guard can fall through (`aircraft.py:197–202`).**
-   For an already watchlisted/interesting aircraft, unavailable data younger
-   than five cycles does not return from this block. Updating a previously
-   interesting object with `persistent=False` and missing fields therefore
-   reaches `self.speed_kts <= 120` with speed None and raises TypeError.
-   The tracker normally updates existing aircraft with persistence enabled;
-   the reproducer exercises the supported nonpersistent update path. The
-   unavailable-data block needs an explicit outcome for every path.
-
-3. **Distance and altitude limits depend on the score band (`aircraft.py:254–272`).**
-   Scores below 30 apply the >=15 nm and >=30,000 ft limits; the >=30 branch
-   ignores both for speeds above 150 kt. Synthetic inbound aircraft at
-   33,000 ft / 2 nm and 1,000 ft / 30 nm both become VERY_INTERESTING. Two
-   expected-failure tests assume those limits should apply across score bands.
-   If very high scores are deliberately allowed to override the limits, these
-   two expectations should instead be changed to document that exception.
-
-All Python files syntax-check successfully, and all new sample observations
-score without exceptions on their initial update. No production code was
-changed as part of this review.
+These are receiver-data indicators of visibility, not human observations.
+Weather, terrain, obstruction, aircraft size, and actual airport locations are
+not modeled. The supplied snapshots contain few qualifying positive cases;
+the synthetic cases cover the boundary and behavior combinations missing from
+them.

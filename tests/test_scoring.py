@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from Aircraft.aircraft import Aircraft, Interesting, home_lat, home_lon
+from Aircraft.tracker import AircraftTracker
 from scoring_baselines import pre_modifier_interest, refactor_interest
 
 
@@ -22,21 +23,25 @@ def classify(rows, scoring=None):
 
 
 def viewing_candidate(plane):
-    """A viewing proxy, independent of scores, callsigns, and assigned states.
+    """The user's visibility criteria, independent of scores and assigned states.
 
-    Prefer nearby aircraft below 10,000 ft moving above 150 kt, or an imminent
-    close pass below 30,000 ft. Also include very nearby low, slow aircraft.
-    This describes likely viewing interest; the snapshots have no human labels.
+    Generally <=10,000 ft, <=8 nm, and 180–300 kt. Include imminent nearby
+    passes and slower descending approaches. Snapshots have no human labels.
     """
     if not (plane.altitude_available and plane.groundspeed_available and
             plane.distance_available and plane.relational_info_available):
         return False
-    nearby_low = plane.alt_ft <= 10000 and plane.dist_nm <= 10 and plane.speed_kts > 150
-    imminent_pass = (plane.alt_ft < 30000 and plane.dist_nm <= 4 and plane.speed_kts > 150 and
-                     plane.CPA['dist_nm'] is not None and plane.CPA['dist_nm'] <= 2 and
-                     plane.CPA['time_hr'] is not None and 0 <= plane.CPA['time_hr'] <= 3 / 60)
-    very_near_low = plane.alt_ft <= 7500 and plane.dist_nm <= 4
-    return nearby_low or imminent_pass or very_near_low
+    if not (0 < plane.alt_ft <= 10000):
+        return False
+    nearby_low = plane.dist_nm <= 8 and 180 <= plane.speed_kts <= 300
+    imminent_pass = (plane.dist_nm <= 15 and 180 <= plane.speed_kts <= 300 and plane.is_closing and
+                     plane.CPA['dist_nm'] is not None and plane.CPA['dist_nm'] <= 8 and
+                     plane.CPA['time_hr'] is not None and 0 < plane.CPA['time_hr'] <= 5 / 60)
+    rate = plane.plane.get('baro_rate', plane.plane.get('geom_rate'))
+    airport_movement = (plane.dist_nm <= 8 and isinstance(rate, (int, float)) and
+                        ((rate >= 300 and 160 < plane.speed_kts <= 300) or
+                         (rate <= -300 and 120 <= plane.speed_kts <= 300)))
+    return nearby_low or imminent_pass or airport_movement
 
 
 def synthetic_plane(distance=6, altitude=1000, speed=200, track=0, flight="TEST123"):
@@ -77,7 +82,7 @@ class SampleScoringTests(unittest.TestCase):
                     candidates += 1
                     current_hits += plane.interesting in INTERESTING
                     original_hits += old.interesting in INTERESTING
-        self.assertGreaterEqual(candidates, 3)
+        self.assertGreaterEqual(candidates, 1)
         self.assertGreater(current_hits, original_hits)
         self.assertEqual(current_hits, candidates)
 
@@ -102,6 +107,37 @@ class SampleScoringTests(unittest.TestCase):
         self.assertGreater(previous_selected, 0)
         self.assertGreater(current_hits / current_selected, previous_hits / previous_selected)
         self.assertEqual(current_hits, current_selected)
+
+    def test_sample_approaches_and_departures_are_recovered(self):
+        for number, expected in (
+            (2, {'a6b10c', 'abd7d1'}),
+            (4, {'a81832', 'a85568', 'a1c5e0'}),
+            (5, {'a16c2c'}),
+        ):
+            with self.subTest(sample=number):
+                rows = json.loads((SAMPLE_DIR / f"sample{number}.json").read_text())["aircraft"]
+                current = classify(rows)
+                previous = classify(rows, pre_modifier_interest)
+                selected = {p.hex_code for p in current if p.interesting in INTERESTING}
+                self.assertEqual(selected, expected)
+                self.assertTrue(all(p.interesting == Interesting.VERY_INTERESTING
+                                    for p in current if p.hex_code in expected))
+                previous_hits = sum(p.hex_code in expected and p.interesting in INTERESTING for p in previous)
+                self.assertGreater(len(selected), previous_hits)
+
+    def test_tracker_replays_all_samples_without_invalid_states(self):
+        with patch('Aircraft.tracker.DEBUG', False):
+            tracker = AircraftTracker()
+            for path in sorted(SAMPLE_DIR.glob('sample*.json')):
+                rows = json.loads(path.read_text())["aircraft"]
+                for _ in range(35):
+                    tracker.update_tracked_planes(rows)
+                    for plane in tracker.current_planes:
+                        with self.subTest(sample=path.name, hex_code=plane.hex_code):
+                            self.assertIsInstance(plane.interesting, Interesting)
+                            self.assertTrue(math.isfinite(plane.score))
+                            if plane in tracker.active:
+                                self.assertNotEqual(plane.interesting, Interesting.STOP_TRACKING)
 
 
 class SyntheticScoringTests(unittest.TestCase):
@@ -150,38 +186,122 @@ class SyntheticScoringTests(unittest.TestCase):
         self.assertEqual(plane.score, 0)
         self.assertTrue(all(score == 0 for score in plane.debug_score.values()))
 
-    @unittest.expectedFailure
     def test_landing_candidate_in_middle_score_band_is_promoted(self):
-        # Known issue at aircraft.py:256: climb and landing conditions cannot
-        # both hold, so the low-speed guard blocks the landing promotion.
+        # A slow approach with missing rate must not be blocked by a climb guard.
         row = synthetic_plane(distance=6, altitude=2000, speed=140)
         plane = Aircraft(row)
         self.assertGreaterEqual(plane.score, 10)
         self.assertLess(plane.score, 20)
         self.assertEqual(plane.interesting, Interesting.INTERESTING)
 
-    @unittest.expectedFailure
     def test_previously_interesting_aircraft_handles_nonpersistent_missing_data(self):
-        # Known issue at aircraft.py:197-202: unavailable data younger than
-        # five cycles falls through; numeric modifiers then compare None.
+        # Missing values must return before numeric modifiers are evaluated.
         plane = Aircraft(synthetic_plane(track=180))
         self.assertIn(plane.interesting, INTERESTING)
         plane.update({"hex": "test123"}, persistent=False)
-        self.assertIsInstance(plane.interesting, Interesting)
+        self.assertEqual(plane.interesting, Interesting.VERY_INTERESTING)
+        self.assertEqual(plane.score, 0)
+        for _ in range(4):
+            plane.update({"hex": "test123"}, persistent=False)
+        self.assertEqual(plane.interesting, Interesting.WATCHLIST)
 
-    @unittest.expectedFailure
     def test_high_altitude_limit_also_applies_above_thirty_points(self):
-        # The >=30 branch bypasses the high-altitude limit used below 30.
         plane = Aircraft(synthetic_plane(distance=2, altitude=33000, speed=500, track=180))
         self.assertGreaterEqual(plane.score, 30)
         self.assertEqual(plane.interesting, Interesting.WATCHLIST)
 
-    @unittest.expectedFailure
     def test_distance_limit_also_applies_above_thirty_points(self):
-        # A low aircraft 30 nm away can score >=30 and bypass not_close.
         plane = Aircraft(synthetic_plane(distance=30, altitude=1000, speed=500, track=180))
         self.assertGreaterEqual(plane.score, 30)
         self.assertEqual(plane.interesting, Interesting.WATCHLIST)
+
+    def test_typical_visible_aircraft_do_not_need_a_callsign_or_high_score(self):
+        plane = Aircraft(synthetic_plane(distance=7.9, altitude=10000, speed=200, flight=None))
+        self.assertLess(plane.score, 5)
+        self.assertEqual(plane.interesting, Interesting.INTERESTING)
+
+    def test_visibility_and_speed_boundaries(self):
+        for distance, altitude, speed, expected in (
+            (8, 10000, 180, Interesting.INTERESTING),
+            (8, 10000, 300, Interesting.INTERESTING),
+            (8.01, 10000, 200, Interesting.IGNORE),
+            (8, 10001, 200, Interesting.IGNORE),
+            (8, 10000, 179, Interesting.WATCHLIST),
+            (8, 10000, 301, Interesting.WATCHLIST),
+        ):
+            with self.subTest(distance=distance, altitude=altitude, speed=speed):
+                plane = Aircraft(synthetic_plane(distance, altitude, speed, flight=None))
+                # Avoid a floating-point round trip moving an exact 8 nm test
+                # just over the boundary in the position calculation.
+                plane.dist_nm = distance
+                self.assertEqual(plane.update_interesting(), expected)
+
+    def test_climb_and_descent_prioritized_using_reported_rates(self):
+        for speed, rate in ((200, 1000), (200, -1000), (140, -700), (175, 700)):
+            with self.subTest(speed=speed, rate=rate):
+                row = synthetic_plane(speed=speed, flight=None)
+                row['baro_rate'] = rate
+                self.assertEqual(Aircraft(row).interesting, Interesting.VERY_INTERESTING)
+
+    def test_approach_rate_does_not_depend_on_heading_toward_home(self):
+        row = synthetic_plane(speed=140, track=0)
+        row['baro_rate'] = -700
+        plane = Aircraft(row)
+        self.assertFalse(plane.is_closing)
+        self.assertEqual(plane.interesting, Interesting.VERY_INTERESTING)
+
+    def test_callsign_alone_does_not_make_level_flight_very_interesting(self):
+        row = synthetic_plane()
+        row['baro_rate'] = 0
+        self.assertEqual(Aircraft(row).interesting, Interesting.INTERESTING)
+        row['gs'] = 140
+        self.assertEqual(Aircraft(row).interesting, Interesting.WATCHLIST)
+
+    def test_vertical_rate_fallback_and_invalid_values(self):
+        for invalid in (None, 'unknown', float('nan'), float('inf')):
+            with self.subTest(rate=invalid):
+                row = synthetic_plane()
+                row.update(baro_rate=invalid, geom_rate=1000)
+                self.assertEqual(Aircraft(row).interesting, Interesting.VERY_INTERESTING)
+                row['geom_rate'] = invalid
+                self.assertEqual(Aircraft(row).interesting, Interesting.INTERESTING)
+
+    def test_inbound_aircraft_can_be_interesting_before_entering_viewing_range(self):
+        for distance, speed, expected in (
+            (12, 200, Interesting.VERY_INTERESTING),
+            (15, 180, Interesting.VERY_INTERESTING),
+            (16, 200, Interesting.WATCHLIST),
+            (12, 200, Interesting.WATCHLIST),
+        ):
+            with self.subTest(distance=distance, speed=speed, expected=expected):
+                track = 0 if expected == Interesting.WATCHLIST and distance == 12 else 180
+                plane = Aircraft(synthetic_plane(distance=distance, speed=speed, track=track))
+                self.assertEqual(plane.interesting, expected)
+
+    def test_high_score_does_not_promote_aircraft_outside_preferred_speed_band(self):
+        for speed in (100, 350, 500):
+            with self.subTest(speed=speed):
+                plane = Aircraft(synthetic_plane(distance=6, speed=speed, track=180))
+                self.assertGreaterEqual(plane.score, 30)
+                self.assertEqual(plane.interesting, Interesting.WATCHLIST)
+
+    def test_grounded_aircraft_are_ignored(self):
+        for altitude, speed in (('ground', 200), (0, 200), (1000, 0)):
+            with self.subTest(altitude=altitude, speed=speed):
+                plane = Aircraft(synthetic_plane(altitude=altitude, speed=speed))
+                self.assertEqual(plane.interesting, Interesting.IGNORE)
+
+    def test_partial_missing_fields_cannot_promote_previous_state(self):
+        for state in (Interesting.WATCHLIST, Interesting.INTERESTING, Interesting.VERY_INTERESTING):
+            for field in ('alt_baro', 'gs', 'track', 'lat', 'lon'):
+                with self.subTest(state=state, field=field):
+                    plane = Aircraft(synthetic_plane())
+                    plane.interesting = state
+                    row = synthetic_plane()
+                    del row[field]
+                    plane.update(row, persistent=False)
+                    self.assertEqual(plane.interesting, state)
+                    self.assertEqual(plane.score, 0)
 
 
 if __name__ == "__main__":
