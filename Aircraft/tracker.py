@@ -23,6 +23,7 @@ class AircraftTracker:
         self.current_planes = []
         self.active = []
         self.interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
+        self.watchlist_state = Interesting.WATCHLIST
         self.current_codes = set()
 
     def update_tracked_planes(self, adsb_data):

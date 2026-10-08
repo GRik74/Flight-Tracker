@@ -21,9 +21,14 @@ def main():
 
         positioned_planes = [plane for plane in tracker.active if plane.distance_available and isinstance(plane.dist_nm, (int, float))]
         print(f"Non-suppressed aircraft with known positions: {len(positioned_planes)}")
+        
         planes_interesting = [plane for plane in tracker.current_planes if plane.interesting in tracker.interesting_states]
+        if len(planes_interesting) == 0:
+            print("No interesting planes found... Checking for watchlist planes...\n")
+            planes_interesting = [plane for plane in tracker.current_planes if plane.interesting == tracker.watchlist_state]
+            
         if len(planes_interesting) == 0 and len(positioned_planes) > 0:
-            print("No interesting planes found... Finding the closest plane instead...\n")
+            print("No interesting/watchlist planes found... Finding the closest plane instead...\n")
             closest_plane = min(positioned_planes, key=lambda plane: plane.dist_nm)
             show_planes([closest_plane])
         else:
