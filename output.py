@@ -10,18 +10,16 @@ def show_planes(planes):
         plane_info += f" | GS: {str(int(round(plane.speed_kts, 0))):>8} kts" if plane.groundspeed_available else f" | GS: {'unknown':>8} kts"
 
         print(plane_info)
-        if DEBUG: print(f"""
-
------------------------------        
+        if DEBUG: print(f"""------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ 
 DEBUG: {plane.hex_code} | Age: {plane.age} | Missing from receiver: {plane.missing_from_receiver} | Buffer grace: {plane.buffer_grace} | Interesting: {plane.interesting} \n
+Time to CPA: {round(plane.CPA['time_hr']*60, 0)} mins | Dist_nm at CPA: {round(plane.CPA['dist_nm'], 1)} nm | Bearing at CPA: {round(plane.CPA['bearing'], 0)} deg.
 
 Score:
 Proximity:     {round(plane.debug_score['proximity score'], 1)}
 Altitude:      {round(plane.debug_score['altitude score'], 1)}
 Closing Prox.: {round(plane.debug_score['closing prox. score'], 1)}
 Closing Time:  {round(plane.debug_score['closing time score'], 1)}
------------------------------
-Total Score:   {round(plane.score, 1)}
------------------------------
 
+Total Score:   {round(plane.score, 1)}
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 """)
