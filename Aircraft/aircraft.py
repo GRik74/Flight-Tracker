@@ -210,10 +210,10 @@ class Aircraft():
         if (self.CPA['time_hr'] is not None and self.CPA['time_hr'] < 0) and (self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] > 8) and not self.interesting == Interesting.IGNORE:
             return Interesting.IGNORE
 
-
+        flight_available = 2.5 if bool(self.flight) else -5.0
         proximity_score = max((20 - self.dist_nm), 0.0) * 0.4 if self.distance_available else -5.0
         altitude_score = max((18000-self.alt_ft)/500, 0.0) * 0.3 if self.altitude_available else -2.0
-        closing_proximity_score = max((10 - self.CPA['dist_nm']), 0.0) if self.CPA['dist_nm'] is not None and self.is_closing else -2.5
+        closing_proximity_score = max((10 - self.CPA['dist_nm'])*1.75, -10.0) if self.CPA['dist_nm'] is not None and self.is_closing else -10.0
         if (
             self.is_closing and
             self.CPA['time_hr'] is not None and
@@ -221,11 +221,14 @@ class Aircraft():
             self.CPA['dist_nm'] is not None and
             self.CPA['dist_nm'] <= 8
         ):
-            closing_time_score = max((15 - (self.CPA['time_hr'] * 60))*1.1, 0.0)
+            closing_time_score = max((15 - (self.CPA['time_hr'] * 60))/1.8, -2.5)
+        elif self.CPA['time_hr'] <= -2.5:
+            closing_time_score = -15
         else:
-            closing_time_score = 0.0
+            closing_time_score = 0
 
         self.score = (
+            flight_available +
             proximity_score +
             altitude_score +
             closing_proximity_score +
@@ -236,7 +239,8 @@ class Aircraft():
             'proximity score': proximity_score,
             'altitude score': altitude_score,
             'closing prox. score': closing_proximity_score,
-            'closing time score': closing_time_score
+            'closing time score': closing_time_score,
+            'flight avail.': flight_available
         }
         
         # Apply visibility limits before any score or airport-pattern promotion.
@@ -250,7 +254,7 @@ class Aircraft():
                         self.CPA['dist_nm'] is not None and self.CPA['dist_nm'] <= 8)
         
         if not low_alt or not (within_viewing_range or visible_soon):
-            return Interesting.WATCHLIST if self.score >= 5 else Interesting.IGNORE
+            return Interesting.WATCHLIST if self.score >= 8 else Interesting.IGNORE
 
         # Rates are optional receiver values; do not infer climb/descent from a callsign.
         vertical_rate = self.plane.get('baro_rate')
@@ -286,19 +290,6 @@ class Aircraft():
         self.stop_tracking_cycles = 0
         self.distance_available = False
         self.relational_info_available = False
-
-        # self.dist_nm = None
-        # self.bearing_to_plane = None
-        # self.recip_bearing = None
-        # self.angle_on_bow = None
-        # self.relative_bearing = None
-        # self.is_closing = None
-        # self.CPA = {
-        #     'time_hr': None,
-        #     'dist_nm': None,
-        #     'bearing': None
-        # }
-
 
 
 class Interesting(Enum):

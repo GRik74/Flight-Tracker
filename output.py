@@ -15,6 +15,7 @@ DEBUG: {plane.hex_code} | Age: {plane.age} | Missing from receiver: {plane.missi
 Time to CPA: {round(plane.CPA['time_hr']*60, 0)} mins | Dist_nm at CPA: {round(plane.CPA['dist_nm'], 1)} nm | Bearing at CPA: {round(plane.CPA['bearing'], 0)} deg.
 
 Score:
+Flight Avail.: {plane.debug_score['flight avail.']}
 Proximity:     {round(plane.debug_score['proximity score'], 1)}
 Altitude:      {round(plane.debug_score['altitude score'], 1)}
 Closing Prox.: {round(plane.debug_score['closing prox. score'], 1)}
