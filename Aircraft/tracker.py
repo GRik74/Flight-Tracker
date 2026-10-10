@@ -3,8 +3,8 @@
 from Aircraft.aircraft import Aircraft, Interesting
 
 DEBUG = True
-interest_grace = 30  # Grace cycles before stopping interest tracking.
-missing_grace = 15 # Grace cycles before stale aircraft are removed from tracked_planes.
+interest_grace = 45  # Grace cycles before stopping interest tracking.
+missing_grace = 30 # Grace cycles before stale aircraft are removed from tracked_planes.
 
 def get_current_hex_codes(planes):
     codes = {
@@ -23,6 +23,7 @@ class AircraftTracker:
         self.current_planes = []
         self.active = []
         self.interesting_states = [Interesting.INTERESTING, Interesting.VERY_INTERESTING]
+        self.watchlist_state = Interesting.WATCHLIST
         self.current_codes = set()
 
     def update_tracked_planes(self, adsb_data):
