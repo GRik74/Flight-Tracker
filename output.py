@@ -1,4 +1,17 @@
+import json, logging
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+temp_file = Path("/home/grik74/flight-tracker/temp.json")
+output_file = Path("/home/gik74/flight-tracker/aircraft.json")
+error_file = Path("/home/grik74/flight-tracker/errors.log")
+error_file = Path("/home/grik74/flight-tracker/tracker.log")
+
 DEBUG = True
+
+# def setup_logger():
+#     logging.basicConfig(filename = )
 
 def show_planes(planes):
     for plane in planes:
@@ -24,3 +37,5 @@ Closing Time:  {round(plane.debug_score['closing time score'], 1)}
 Total Score:   {round(plane.score, 1)}
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 """)
+
+
