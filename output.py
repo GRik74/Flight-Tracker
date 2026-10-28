@@ -1,12 +1,14 @@
 import json, logging
+import time
 from pathlib import Path
+from os import replace
 
 logger = logging.getLogger(__name__)
 
 temp_file = Path("/home/grik74/flight-tracker/temp.json")
-output_file = Path("/home/gik74/flight-tracker/aircraft.json")
+interesting_planes = Path("/home/gik74/flight-tracker/aircraft.json")
+tracked_planes = Path("/home/grik74/flight-tracker/tracker.json")
 error_file = Path("/home/grik74/flight-tracker/errors.log")
-error_file = Path("/home/grik74/flight-tracker/tracker.log")
 
 DEBUG = True
 
@@ -38,4 +40,13 @@ Total Score:   {round(plane.score, 1)}
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 """)
 
+def write_output(interesting_planes, tracked_planes):
+    # write JSON snapshot in temp_file, including timestamp
+    # record interesting & tracked planes in their own JSON files
+
+
+def dump_error_info(error, cause):
+    # Record error info
+        #   -Error type and location
+        #   -Cause of error (file, line, variable, etc.)
 

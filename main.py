@@ -1,6 +1,7 @@
 from Aircraft.tracker import AircraftTracker
 from adsb_reader import load_aircraft
 from output import show_planes
+from time import sleep
 
 DEBUG = True
 if DEBUG: import os
@@ -43,8 +44,10 @@ def main():
             oldest_plane = max(tracker.tracked_planes.values(), key=lambda plane: plane.age, default=None)
             print(f"DEBUG: Oldest plane in tracked_planes: {oldest_plane.hex_code if oldest_plane else 'N/A'} (Age: {oldest_plane.age if oldest_plane else 'N/A'})")
 
-        RUN_AGAIN = input("\nRun again? (y/n): ").strip().lower()
-        ACTIVE = True if RUN_AGAIN != "n" else False
+        # RUN_AGAIN = input("\nRun again? (y/n): ").strip().lower()
+        # ACTIVE = True if RUN_AGAIN != "n" else False
+
+        sleep(1)
 
 ######################### END MAIN PROGRAM LOOP ###########################
 
