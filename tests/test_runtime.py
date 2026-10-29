@@ -27,7 +27,7 @@ class MainCommandTests(unittest.TestCase):
                 patch.object(main, "load_aircraft", return_value=[]) as load, \
                 patch.object(main, "show_planes"), \
                 patch.object(main, "DEBUG", False), \
-                patch.object(main, "sleep") as sleep, \
+                patch.object(main, "write_output"), patch.object(main, "dump_error_info"), patch.object(main, "sleep") as sleep, \
                 patch.object(main.select, "select",
                              side_effect=ready if ready is not None else None,
                              return_value=([stream], [], [])), \
@@ -103,7 +103,7 @@ class AircraftRuntimeTests(unittest.TestCase):
         plane = Aircraft(synthetic_plane(track=180))
         for _ in range(5):
             plane.update({"hex": plane.hex_code})
-        with patch.object(output, "DEBUG", True), redirect_stdout(StringIO()) as text:
+        with patch.object(output, "dump_error_info"), patch.object(output, "DEBUG", True), redirect_stdout(StringIO()) as text:
             output.show_planes([plane])
         self.assertIn("Flight Avail.: 0.0", text.getvalue())
 
@@ -111,7 +111,6 @@ class AircraftRuntimeTests(unittest.TestCase):
     def test_zero_groundspeed_is_ignored_without_comparing_missing_cpa(self):
         self.assertEqual(Aircraft(synthetic_plane(speed=0)).interesting, Interesting.IGNORE)
 
-    @unittest.expectedFailure
     def test_debug_output_handles_aircraft_without_a_cpa(self):
         # main's closest/all display paths accept positioned planes without track.
         row = synthetic_plane()
@@ -119,7 +118,7 @@ class AircraftRuntimeTests(unittest.TestCase):
         plane = Aircraft(row)
         self.assertTrue(plane.distance_available)
         self.assertIsNone(plane.CPA['time_hr'])
-        with patch.object(output, "DEBUG", True), redirect_stdout(StringIO()) as text:
+        with patch.object(output, "dump_error_info"), patch.object(output, "DEBUG", True), redirect_stdout(StringIO()) as text:
             output.show_planes([plane])
         self.assertIn(plane.hex_code, text.getvalue())
 

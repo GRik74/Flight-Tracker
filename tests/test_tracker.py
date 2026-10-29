@@ -144,7 +144,7 @@ class AircraftTrackerTests(unittest.TestCase):
                 patch.object(main, "load_aircraft", side_effect=snapshots), \
                 patch.object(main, "show_planes") as show, \
                 patch.object(main, "DEBUG", False), \
-                patch.object(main, "sleep"), \
+                patch.object(main, "write_output"), patch.object(main, "dump_error_info"), patch.object(main, "sleep"), \
                 patch.object(main.select, "select", return_value=([main.sys.stdin], [], [])), \
                 patch.object(main.sys, "stdin", StringIO("\n" * len(snapshots))), \
                 patch("builtins.input", side_effect=["resume"] * (len(snapshots) - 1) + ["q"]), \

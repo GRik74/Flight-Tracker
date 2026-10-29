@@ -1,6 +1,6 @@
 from Aircraft.tracker import AircraftTracker
 from adsb_reader import load_aircraft
-from output import show_planes
+from output import show_planes, write_output, dump_error_info
 from time import sleep, monotonic
 import select
 import sys
@@ -11,6 +11,15 @@ if DEBUG: import os
 
 def main():
     tracker = AircraftTracker()
+    try:
+        _run(tracker)
+    except Exception as error:
+        dump_error_info(error, "Unhandled main-loop failure", severity="CRITICAL",
+                        handled=False, tracked_planes=tracker.tracked_planes)
+        raise
+
+
+def _run(tracker):
     # ACTIVE = True
 
     interval = 1.0
@@ -20,10 +29,20 @@ def main():
 ################# START MAIN PROGRAM LOOP #########################
 
     while True:
-        aircraft = load_aircraft()
+        try:
+            aircraft = load_aircraft()
+            if not isinstance(aircraft, list):
+                raise ValueError("Receiver aircraft field must be a list")
+        except (OSError, ValueError) as error:
+            dump_error_info(error, "Reading receiver snapshot; retrying next interval",
+                            severity="WARNING", tracked_planes=tracker.tracked_planes)
+            sleep(interval)
+            continue
         if DEBUG:os.system("clear")
 
         tracker.update_tracked_planes(aircraft)
+        write_output([p for p in tracker.current_planes
+                      if p.interesting in tracker.interesting_states], tracker.tracked_planes)
 
         print(f"Aircraft heard: {len(aircraft)} | Tracked planes: {len(tracker.tracked_planes)}")
 
@@ -127,9 +146,11 @@ def main():
                         case _:
                             print("Use interval N, cycles N, cycles all, resume, output, or q.")
 
-                except ValueError:
+                except ValueError as error:
+                    dump_error_info(error, "Invalid command", severity="INFO")
                     print("Use interval 0.1-3600 or a positive whole cycle count.")
-                except TypeError:
+                except TypeError as error:
+                    dump_error_info(error, "Invalid output command", severity="INFO")
                     print("Valid output mode choices: default | suppressed | all.")
 
 
@@ -137,3 +158,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
