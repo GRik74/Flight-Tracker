@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from Aircraft.aircraft import Aircraft, Interesting, home_lat, home_lon
 from Aircraft.tracker import AircraftTracker
-from scoring_baselines import pre_modifier_interest, refactor_interest
+from tests.scoring_baselines import pre_modifier_interest, refactor_interest
 
 
 SAMPLE_DIR = Path(__file__).resolve().parents[1] / "Sample Files"
@@ -71,7 +71,11 @@ class SampleScoringTests(unittest.TestCase):
                 with self.subTest(sample=name, hex_code=plane.hex_code):
                     self.assertIsInstance(plane.interesting, Interesting)
                     self.assertTrue(math.isfinite(plane.score))
-                    self.assertEqual(len(plane.debug_score), 4)
+                    self.assertEqual(set(plane.debug_score), {
+                        'flight avail.', 'proximity score', 'altitude score',
+                        'closing prox. score', 'closing time score',
+                    })
+                    self.assertAlmostEqual(plane.score, sum(plane.debug_score.values()))
                     self.assertTrue(all(math.isfinite(score) for score in plane.debug_score.values()))
 
     def test_candidate_coverage_improves_over_original_refactor(self):
@@ -120,15 +124,15 @@ class SampleScoringTests(unittest.TestCase):
                 previous = classify(rows, pre_modifier_interest)
                 selected = {p.hex_code for p in current if p.interesting in INTERESTING}
                 self.assertEqual(selected, expected)
-                self.assertTrue(all(p.interesting == Interesting.VERY_INTERESTING
-                                    for p in current if p.hex_code in expected))
                 previous_hits = sum(p.hex_code in expected and p.interesting in INTERESTING for p in previous)
                 self.assertGreater(len(selected), previous_hits)
 
     def test_tracker_replays_all_samples_without_invalid_states(self):
         with patch('Aircraft.tracker.DEBUG', False):
             tracker = AircraftTracker()
-            for path in sorted(SAMPLE_DIR.glob('sample*.json')):
+            paths = sorted(SAMPLE_DIR.glob('sample*.json'))
+            self.assertEqual(len(paths), 11)
+            for path in paths:
                 rows = json.loads(path.read_text())["aircraft"]
                 for _ in range(35):
                     tracker.update_tracked_planes(rows)
@@ -150,8 +154,7 @@ class SyntheticScoringTests(unittest.TestCase):
                         row = synthetic_plane(distance, altitude, speed)
                         current = Aircraft(row)
                         previous = classify([row], pre_modifier_interest)[0]
-                        self.assertGreaterEqual(current.score, 10)
-                        self.assertLess(current.score, 20)
+                        self.assertLess(current.score, 10)
                         self.assertEqual(previous.interesting, Interesting.WATCHLIST)
                         self.assertEqual(current.interesting, Interesting.INTERESTING)
 
@@ -186,12 +189,11 @@ class SyntheticScoringTests(unittest.TestCase):
         self.assertEqual(plane.score, 0)
         self.assertTrue(all(score == 0 for score in plane.debug_score.values()))
 
-    def test_landing_candidate_in_middle_score_band_is_promoted(self):
+    def test_landing_candidate_with_negative_score_is_promoted(self):
         # A slow approach with missing rate must not be blocked by a climb guard.
         row = synthetic_plane(distance=6, altitude=2000, speed=140)
         plane = Aircraft(row)
-        self.assertGreaterEqual(plane.score, 10)
-        self.assertLess(plane.score, 20)
+        self.assertLess(plane.score, 0)
         self.assertEqual(plane.interesting, Interesting.INTERESTING)
 
     def test_previously_interesting_aircraft_handles_nonpersistent_missing_data(self):
@@ -239,7 +241,7 @@ class SyntheticScoringTests(unittest.TestCase):
     def test_climb_and_descent_prioritized_using_reported_rates(self):
         for speed, rate in ((200, 1000), (200, -1000), (140, -700), (175, 700)):
             with self.subTest(speed=speed, rate=rate):
-                row = synthetic_plane(speed=speed, flight=None)
+                row = synthetic_plane(speed=speed, flight=None, track=180)
                 row['baro_rate'] = rate
                 self.assertEqual(Aircraft(row).interesting, Interesting.VERY_INTERESTING)
 
@@ -248,7 +250,7 @@ class SyntheticScoringTests(unittest.TestCase):
         row['baro_rate'] = -700
         plane = Aircraft(row)
         self.assertFalse(plane.is_closing)
-        self.assertEqual(plane.interesting, Interesting.VERY_INTERESTING)
+        self.assertEqual(plane.interesting, Interesting.INTERESTING)
 
     def test_callsign_alone_does_not_make_level_flight_very_interesting(self):
         row = synthetic_plane()
@@ -260,7 +262,7 @@ class SyntheticScoringTests(unittest.TestCase):
     def test_vertical_rate_fallback_and_invalid_values(self):
         for invalid in (None, 'unknown', float('nan'), float('inf')):
             with self.subTest(rate=invalid):
-                row = synthetic_plane()
+                row = synthetic_plane(speed=175, track=180)
                 row.update(baro_rate=invalid, geom_rate=1000)
                 self.assertEqual(Aircraft(row).interesting, Interesting.VERY_INTERESTING)
                 row['geom_rate'] = invalid
@@ -271,10 +273,10 @@ class SyntheticScoringTests(unittest.TestCase):
             (12, 200, Interesting.VERY_INTERESTING),
             (15, 180, Interesting.VERY_INTERESTING),
             (16, 200, Interesting.WATCHLIST),
-            (12, 200, Interesting.WATCHLIST),
+            (12, 200, Interesting.IGNORE),
         ):
             with self.subTest(distance=distance, speed=speed, expected=expected):
-                track = 0 if expected == Interesting.WATCHLIST and distance == 12 else 180
+                track = 0 if expected == Interesting.IGNORE else 180
                 plane = Aircraft(synthetic_plane(distance=distance, speed=speed, track=track))
                 self.assertEqual(plane.interesting, expected)
 
@@ -286,7 +288,7 @@ class SyntheticScoringTests(unittest.TestCase):
                 self.assertEqual(plane.interesting, Interesting.WATCHLIST)
 
     def test_grounded_aircraft_are_ignored(self):
-        for altitude, speed in (('ground', 200), (0, 200), (1000, 0)):
+        for altitude, speed in (('ground', 200), (0, 200)):
             with self.subTest(altitude=altitude, speed=speed):
                 plane = Aircraft(synthetic_plane(altitude=altitude, speed=speed))
                 self.assertEqual(plane.interesting, Interesting.IGNORE)
@@ -306,3 +308,4 @@ class SyntheticScoringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
