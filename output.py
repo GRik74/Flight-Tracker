@@ -1,5 +1,5 @@
 import json, logging
-import time
+from time import monotonic, localtime, asctime
 from pathlib import Path
 from os import replace
 
@@ -43,10 +43,15 @@ Total Score:   {round(plane.score, 1)}
 def write_output(interesting_planes, tracked_planes):
     # write JSON snapshot in temp_file, including timestamp
     # record interesting & tracked planes in their own JSON files
+    timestamp = asctime(localtime)
+    i_planes = interesting_planes
 
+    with open(temp_file, "w") as file:
+        json.dump()
 
 def dump_error_info(error, cause):
     # Record error info
         #   -Error type and location
         #   -Cause of error (file, line, variable, etc.)
-
+    timestamp = asctime(localtime)
+    e = error

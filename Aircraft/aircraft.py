@@ -24,7 +24,8 @@ class Aircraft():
             'proximity score': 0.0,
             'altitude score': 0.0,
             'closing prox. score': 0.0,
-            'closing time score': 0.0
+            'closing time score': 0.0,
+            'flight avail.': 0.0
         }
         
         self.age = 0
@@ -195,7 +196,8 @@ class Aircraft():
             'proximity score': 0.0,
             'altitude score': 0.0,
             'closing prox. score': 0.0,
-            'closing time score': 0.0
+            'closing time score': 0.0,
+            'flight avail.': 0.0
         }
         ### Immediate disqualifiers - if any of these are true, the plane will most likely never become interesting and will be set to STOP_TRACKING or IGNORE (if enough cycles have passed)
         if self.interesting == Interesting.STOP_TRACKING and self.stop_tracking_cycles < 5: return
@@ -222,7 +224,7 @@ class Aircraft():
             self.CPA['dist_nm'] <= 8
         ):
             closing_time_score = max((15 - (self.CPA['time_hr'] * 60))/1.8, -2.5)
-        elif self.CPA['time_hr'] <= -2.5:
+        elif self.CPA['time_hr'] <= -2.5 / 60:
             closing_time_score = -15
         else:
             closing_time_score = 0
@@ -271,7 +273,8 @@ class Aircraft():
         )
 
         if airport_movement:
-            return Interesting.VERY_INTERESTING
+            if self.CPA['time_hr'] > 0: return Interesting.VERY_INTERESTING
+            return Interesting.INTERESTING
         if viewing_speed:
             return Interesting.VERY_INTERESTING if self.score >= 30 else Interesting.INTERESTING
 
