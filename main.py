@@ -8,6 +8,10 @@ import sys
 
 DEBUG = True
 if DEBUG: import os
+debug_queue = []
+output_msg = []
+output = []
+dbg = []
 
 def main():
     tracker = AircraftTracker()
@@ -38,51 +42,60 @@ def _run(tracker):
                             severity="WARNING", tracked_planes=tracker.tracked_planes)
             sleep(interval)
             continue
-        if DEBUG:os.system("clear")
 
+        debug_queue = []
+        output_msg = []
         tracker.update_tracked_planes(aircraft)
-        write_output([p for p in tracker.current_planes
-                      if p.interesting in tracker.interesting_states], tracker.tracked_planes)
+        debug_queue = tracker.debug_messages
 
-        print(f"Aircraft heard: {len(aircraft)} | Tracked planes: {len(tracker.tracked_planes)}")
+
+        debug_queue.append(f"Aircraft heard: {len(aircraft)} | Tracked planes: {len(tracker.tracked_planes)}")
 
         positioned_planes = [plane for plane in tracker.active if plane.distance_available and isinstance(plane.dist_nm, (int, float))]
-        print(f"Non-suppressed aircraft with known positions: {len(positioned_planes)}\n\n")
+        debug_queue.append(f"Non-suppressed aircraft with known positions: {len(positioned_planes)}\n\n")
 
         if plane_output_mode == "default":
             planes_interesting = [plane for plane in tracker.current_planes if plane.interesting in tracker.interesting_states]
             if len(planes_interesting) == 0:
-                print("No interesting planes found... Checking for watchlist planes...\n\n")
+                debug_queue.append("No interesting planes found... Checking for watchlist planes...\n\n")
                 planes_interesting = [plane for plane in tracker.current_planes if plane.interesting == tracker.watchlist_state]
                 
             if len(planes_interesting) == 0 and len(positioned_planes) > 0:
-                print("No interesting/watchlist planes found... Finding the closest plane instead...\n\n")
+                debug_queue.append("No interesting/watchlist planes found... Finding the closest plane instead...\n\n")
                 closest_plane = min(positioned_planes, key=lambda plane: plane.dist_nm)
-                show_planes([closest_plane])
+                output, dbg = show_planes([closest_plane])
+                output_msg += (output)
+                debug_queue += (dbg)
             else:
-                print(f"Tracked planes with potentially interesting status: {len(planes_interesting)}")
-                show_planes(planes_interesting)
+                debug_queue.append(f"Tracked planes with potentially interesting status: {len(planes_interesting)}")
+                output, dbg = show_planes(planes_interesting)
+                output_msg += (output)
+                debug_queue += (dbg)
 
         elif plane_output_mode == "all":
-            print(f"Plane output mode set to all - showing all heard aircraft...")
-            show_planes(positioned_planes)
+            debug_queue.append(f"Plane output mode set to all - showing all heard aircraft...")
+            output, dbg = show_planes(positioned_planes)
+            output_msg += (output)
+            debug_queue += (dbg)
 
         elif plane_output_mode == "suppressed":
             planes_suppressed = [plane for plane in positioned_planes if plane.interesting in tracker.suppressed_states]
             if len(planes_suppressed) != 0:
-                print("Plane output mode set to suppressed - showing all suppressed aircraft with available position data.")
-                show_planes(planes_suppressed)
+                debug_queue.append("Plane output mode set to suppressed - showing all suppressed aircraft with available position data.")
+                output, dbg = show_planes(planes_suppressed)
+                output_msg += (output)
+                debug_queue += (dbg)
             else:
-                print("Plane output mode set to suppressed, but no suppressed planes in tracker. Resetting output mode to default.")
+                debug_queue.append("Plane output mode set to suppressed, but no suppressed planes in tracker. Resetting output mode to default.")
                 plane_output_mode = "default"
 
 
         if DEBUG:
-            print(f"\nDEBUG: Tracked planes this cycle: {len(tracker.tracked_planes)}")
+            debug_queue.append(f"\nDEBUG: Tracked planes this cycle: {len(tracker.tracked_planes)}")
             oldest_plane = max(tracker.tracked_planes.values(), key=lambda plane: plane.age, default=None)
-            print(f"DEBUG: Oldest plane in tracked_planes: {oldest_plane.hex_code if oldest_plane else 'N/A'} (Age: {oldest_plane.age if oldest_plane else 'N/A'})")
+            debug_queue.append(f"DEBUG: Oldest plane in tracked_planes: {oldest_plane.hex_code if oldest_plane else 'N/A'} (Age: {oldest_plane.age if oldest_plane else 'N/A'})")
             newest_plane = min(tracker.tracked_planes.values(), key=lambda plane: plane.age, default=None)
-            print(f"DEBUG: Oldest plane in tracked_planes: {newest_plane.hex_code if newest_plane else 'N/A'} (Age: {newest_plane.age if newest_plane else 'N/A'})")
+            debug_queue.append(f"DEBUG: Oldest plane in tracked_planes: {newest_plane.hex_code if newest_plane else 'N/A'} (Age: {newest_plane.age if newest_plane else 'N/A'})")
 
         if cycles_left is not None:
             cycles_left -= 1
@@ -91,6 +104,15 @@ def _run(tracker):
                 if isinstance(more_cycles, int()): cycles_left = int(more_cycles)
                 elif more_cycles == "": cycles_left = None
                 else: break
+
+        write_output([p for p in tracker.current_planes
+                if p.interesting in tracker.interesting_states], tracker.tracked_planes)
+
+        if DEBUG:os.system("clear")
+        for msg in output_msg:
+            if msg != "": print(msg)
+        for msg in debug_queue:
+            if msg != "": print(msg)
 
         deadline = monotonic() + interval                        
 

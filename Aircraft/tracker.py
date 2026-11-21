@@ -28,8 +28,10 @@ class AircraftTracker:
         self.watchlist_state = Interesting.WATCHLIST
         self.suppressed_states = [Interesting.STOP_TRACKING, Interesting.IGNORE]
         self.current_codes = set()
+        self.debug_messages = []
 
     def update_tracked_planes(self, adsb_data):
+        self.debug_messages = []
         valid = []
         for row in adsb_data:
             if isinstance(row, dict) and isinstance(row.get("hex", ""), str):
@@ -72,13 +74,13 @@ class AircraftTracker:
         # Apply retention policy after the aircraft's current interest is calculated.
         if plane.interesting in self.interesting_states or plane.interesting == Interesting.WATCHLIST:
             if plane.buffer_grace != 0 and DEBUG:
-                print(f"DEBUG: Reset interesting buffer for {plane.hex_code} to 0. Current state: {plane.interesting}.")
+                self.debug_messages.append(f"DEBUG: Reset interesting buffer for {plane.hex_code} to 0. Current state: {plane.interesting}.")
             plane.buffer_grace = 0
         elif plane.interesting != Interesting.STOP_TRACKING:
             if plane.buffer_grace >= interest_grace:
                 plane.stop_tracking()
                 if DEBUG:
-                    print(f"DEBUG: Stopped tracking {plane.hex_code} due to expired grace period.")
+                    self.debug_messages.append(f"DEBUG: Stopped tracking {plane.hex_code} due to expired grace period.")
             else:
                 plane.buffer_grace += 1
                 # if DEBUG:
@@ -93,14 +95,14 @@ class AircraftTracker:
                     del self.tracked_planes[hex_code]
 
                     if DEBUG:
-                        print(f"DEBUG: Removed stale plane {hex_code} from tracked_planes.")
+                        self.debug_messages.append(f"DEBUG: Removed stale plane {hex_code} from tracked_planes.")
                 else:
                     plane.missing_from_receiver += 1
                     if DEBUG:
-                        print(f"DEBUG: Incremented missing from receiver for {hex_code} to {plane.missing_from_receiver}.")
+                        self.debug_messages.append(f"DEBUG: Incremented missing from receiver for {hex_code} to {plane.missing_from_receiver}.")
             else:
                 if plane.missing_from_receiver != 0 and DEBUG:
-                    print(f"DEBUG: Reset missing from receiver counter for {hex_code} to 0.")
+                    self.debug_messages.append(f"DEBUG: Reset missing from receiver counter for {hex_code} to 0.")
 
                 plane.missing_from_receiver = 0
 

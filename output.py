@@ -16,15 +16,23 @@ DEBUG = True
 #     logging.basicConfig(filename = )
 
 def show_planes(planes):
+    output_msgs = []
+    dbg_msgs = []
     for plane in planes:
         try:
-            _show_planes([plane])
+            output, dbg = _show_planes([plane])
+            output_msgs.append(output)
+            dbg_msgs.append(dbg)
         except (TypeError, ValueError, KeyError, ArithmeticError, OSError) as error:
             dump_error_info(error, f"Displaying aircraft {plane.hex_code}",
                             severity="WARNING", tracked_planes=planes)
 
+    return output_msgs, dbg_msgs
+
 
 def _show_planes(planes):
+    msg = ""
+    dbg = ""
     for plane in planes:
         plane_info = f"Hex Code: {plane.hex_code:7}"
         plane_info += f"| {plane.flight:10}" if not plane.flight is None else ""
@@ -33,8 +41,8 @@ def _show_planes(planes):
         plane_info += f" | Alt: {str(round(plane.alt_ft, 1)):>7} ft" if plane.altitude_available else f" | Alt: {'unknown':>7} ft"
         plane_info += f" | GS: {str(int(round(plane.speed_kts, 0))):>8} kts" if plane.groundspeed_available else f" | GS: {'unknown':>8} kts"
 
-        print(plane_info)
-        if DEBUG: print(f"""------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ 
+        msg = plane_info
+        if DEBUG: dbg = (f"""------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ 
 DEBUG: {plane.hex_code} | Age: {plane.age} | Missing from receiver: {plane.missing_from_receiver} | Buffer grace: {plane.buffer_grace} | Interesting: {plane.interesting} \n
 Time to CPA: {round(plane.CPA['time_hr']*60, 0)} mins | Dist_nm at CPA: {round(plane.CPA['dist_nm'], 1)} nm | Bearing at CPA: {round(plane.CPA['bearing'], 0)} deg.
 
@@ -48,6 +56,8 @@ Closing Time:  {round(plane.debug_score['closing time score'], 1)}
 Total Score:   {round(plane.score, 1)}
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 """)
+
+        return msg, dbg
 
 # Increase this to retain more routine snapshots. Error snapshots are never rotated.
 SNAPSHOT_RETENTION = 5
