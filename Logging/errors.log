@@ -1,0 +1,48 @@
+{
+  "timestamp": "20261121T170430.201357Z",
+  "type": "TypeError",
+  "severity": "CRITICAL",
+  "handled": false,
+  "outcome": "crash",
+  "cause": "Unhandled main-loop failure",
+  "message": "cannot unpack non-iterable NoneType object",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/grik74/Flight-Tracker/main.py\", line 17, in main\n    _run(tracker)\n  File \"/home/grik74/Flight-Tracker/main.py\", line 69, in _run\n    output_msg, debug_queue = show_planes(planes_interesting)\n    ^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: cannot unpack non-iterable NoneType object\n",
+  "snapshot": "/home/grik74/Flight-Tracker/Logging/errors/20261121T170430.201357Z.json"
+}
+
+{
+  "timestamp": "20261121T170512.624067Z",
+  "type": "TypeError",
+  "severity": "CRITICAL",
+  "handled": false,
+  "outcome": "crash",
+  "cause": "Unhandled main-loop failure",
+  "message": "cannot unpack non-iterable NoneType object",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/grik74/Flight-Tracker/main.py\", line 17, in main\n    _run(tracker)\n  File \"/home/grik74/Flight-Tracker/main.py\", line 69, in _run\n    output, dbg = show_planes(planes_interesting)\n    ^^^^^^^^^^^\nTypeError: cannot unpack non-iterable NoneType object\n",
+  "snapshot": "/home/grik74/Flight-Tracker/Logging/errors/20261121T170512.624067Z.json"
+}
+
+{
+  "timestamp": "20261121T170607.334338Z",
+  "type": "TypeError",
+  "severity": "CRITICAL",
+  "handled": false,
+  "outcome": "crash",
+  "cause": "Unhandled main-loop failure",
+  "message": "cannot unpack non-iterable NoneType object",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/grik74/Flight-Tracker/main.py\", line 19, in main\n    _run(tracker)\n  File \"/home/grik74/Flight-Tracker/main.py\", line 71, in _run\n    output, dbg = show_planes(planes_interesting)\n    ^^^^^^^^^^^\nTypeError: cannot unpack non-iterable NoneType object\n",
+  "snapshot": "/home/grik74/Flight-Tracker/Logging/errors/20261121T170607.334338Z.json"
+}
+
+{
+  "timestamp": "20261121T171225.797929Z",
+  "type": "TypeError",
+  "severity": "CRITICAL",
+  "handled": false,
+  "outcome": "crash",
+  "cause": "Unhandled main-loop failure",
+  "message": "can only concatenate list (not \"str\") to list",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/grik74/Flight-Tracker/main.py\", line 19, in main\n    _run(tracker)\n  File \"/home/grik74/Flight-Tracker/main.py\", line 112, in _run\n    print(output_msg + \"\\n\\n\")\n          ~~~~~~~~~~~^~~~~~~~\nTypeError: can only concatenate list (not \"str\") to list\n",
+  "snapshot": "/home/grik74/Flight-Tracker/Logging/errors/20261121T171225.797929Z.json"
+}
+
